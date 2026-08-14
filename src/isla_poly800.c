@@ -2,8 +2,14 @@
 /*
  * ISLA Poly-800 — headless LV2 wrapper.
  *
- * M1 moves synthesis into poly800_core.c. This file contains only host glue:
- * LV2 ports, sample-accurate MIDI event timing and parameter transfer.
+ * Synthesis lives in poly800_core.c. This file contains host glue only:
+ * LV2 ports, sample-accurate MIDI event timing, parameter transfer and the
+ * small versioned LV2 State interface used for non-port plugin state.
+ *
+ * Program parameters intentionally remain LV2 control ports. Hosts such as
+ * Ardour persist those ports directly; duplicating them in state:interface
+ * would create two competing sources of truth. The state dictionary stores
+ * only a schema/version marker so future non-port state can evolve safely.
  */
 
 #include "poly800_core.h"
@@ -17,9 +23,12 @@
 #include <lv2/atom/util.h>
 #include <lv2/core/lv2.h>
 #include <lv2/midi/midi.h>
+#include <lv2/state/state.h>
 #include <lv2/urid/urid.h>
 
 #define ISLA_POLY800_URI "https://interspock.github.io/isla-poly800"
+#define ISLA_POLY800_STATE_VERSION_URI ISLA_POLY800_URI "#stateVersion"
+#define ISLA_POLY800_STATE_VERSION 1u
 
 typedef enum {
     PORT_MIDI_IN = 0,
@@ -89,6 +98,9 @@ typedef enum {
 typedef struct {
     const void* ports[PORT_COUNT];
     LV2_URID midi_event;
+    LV2_URID atom_int;
+    LV2_URID state_version_key;
+    uint32_t restored_state_version;
     Poly800Core* core;
 } IslaPoly800;
 
@@ -241,7 +253,11 @@ instantiate(const LV2_Descriptor* descriptor,
         free(self);
         return NULL;
     }
+
     self->midi_event = map->map(map->handle, LV2_MIDI__MidiEvent);
+    self->atom_int = map->map(map->handle, LV2_ATOM__Int);
+    self->state_version_key = map->map(map->handle, ISLA_POLY800_STATE_VERSION_URI);
+    self->restored_state_version = ISLA_POLY800_STATE_VERSION;
     return (LV2_Handle)self;
 }
 
@@ -319,10 +335,82 @@ cleanup(LV2_Handle instance)
     }
 }
 
+static LV2_State_Status
+save_state(LV2_Handle instance,
+           LV2_State_Store_Function store,
+           LV2_State_Handle handle,
+           uint32_t flags,
+           const LV2_Feature* const* features)
+{
+    (void)flags;
+    (void)features;
+
+    const IslaPoly800* self = (const IslaPoly800*)instance;
+    const int32_t version = (int32_t)ISLA_POLY800_STATE_VERSION;
+    return store(handle,
+                 self->state_version_key,
+                 &version,
+                 sizeof(version),
+                 self->atom_int,
+                 LV2_STATE_IS_POD | LV2_STATE_IS_PORTABLE);
+}
+
+static LV2_State_Status
+restore_state(LV2_Handle instance,
+              LV2_State_Retrieve_Function retrieve,
+              LV2_State_Handle handle,
+              uint32_t flags,
+              const LV2_Feature* const* features)
+{
+    (void)flags;
+    (void)features;
+
+    IslaPoly800* self = (IslaPoly800*)instance;
+    size_t size = 0;
+    uint32_t type = 0;
+    uint32_t stored_flags = 0;
+    const void* value = retrieve(handle,
+                                 self->state_version_key,
+                                 &size,
+                                 &type,
+                                 &stored_flags);
+
+    /* Empty state means reset to the current schema, as required by LV2. */
+    if (!value) {
+        self->restored_state_version = ISLA_POLY800_STATE_VERSION;
+        return LV2_STATE_SUCCESS;
+    }
+
+    if (type != self->atom_int || size != sizeof(int32_t)) {
+        return LV2_STATE_ERR_BAD_TYPE;
+    }
+
+    int32_t version = 0;
+    memcpy(&version, value, sizeof(version));
+    if (version < 1) {
+        return LV2_STATE_ERR_BAD_TYPE;
+    }
+
+    /*
+     * There is no non-port mutable state in schema 1. Keep the restored
+     * version for forward-compatible diagnostics/migration once such state
+     * exists; program controls remain host-owned LV2 input ports.
+     */
+    self->restored_state_version = (uint32_t)version;
+    return LV2_STATE_SUCCESS;
+}
+
 static const void*
 extension_data(const char* uri)
 {
-    (void)uri;
+    static const LV2_State_Interface state_interface = {
+        save_state,
+        restore_state
+    };
+
+    if (uri && !strcmp(uri, LV2_STATE__interface)) {
+        return &state_interface;
+    }
     return NULL;
 }
 
