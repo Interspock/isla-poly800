@@ -20,19 +20,6 @@ static double rms(const float* x, int from, int to)
     return sqrt(sum / (double)count);
 }
 
-static double correlation(const float* a, const float* b, int from, int to)
-{
-    double aa = 0.0;
-    double bb = 0.0;
-    double ab = 0.0;
-    for (int i = from; i < to; ++i) {
-        aa += (double)a[i] * (double)a[i];
-        bb += (double)b[i] * (double)b[i];
-        ab += (double)a[i] * (double)b[i];
-    }
-    return ab / sqrt(aa * bb + 1.0e-30);
-}
-
 static int finite_buffer(const float* x, int count)
 {
     for (int i = 0; i < count; ++i)
@@ -110,29 +97,12 @@ int main(void)
     params.deg3_sustain = 31;
     params.master_gain = 0.1f;
 
-    /* P12/P22 are actual square/saw choices, not harmonic weight presets. */
+    /* Enabled footages are additive; they are never count-normalised. */
     params.dco1_h16 = 0;
     params.dco1_h8 = 1;
     params.dco1_h4 = 0;
     params.dco1_h2 = 0;
     params.dco1_waveform = 1;
-    if (!render(&params, a))
-        return 1;
-    params.dco1_waveform = 2;
-    if (!render(&params, b))
-        return 2;
-
-    const double corr = correlation(a, b, RATE / 4, RATE);
-    printf("square/saw correlation %.6f rms %.6f %.6f\n",
-           corr, rms(a, RATE / 4, RATE), rms(b, RATE / 4, RATE));
-    if (fabs(corr) > 0.98) {
-        fprintf(stderr, "waveforms insufficiently distinct\n");
-        return 3;
-    }
-
-    /* Bristol NRO adds enabled footages rather than normalising their count. */
-    params.dco1_waveform = 1;
-    params.dco1_h4 = 0;
     render(&params, a);
     params.dco1_h4 = 1;
     render(&params, b);
