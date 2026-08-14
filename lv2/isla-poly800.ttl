@@ -8,9 +8,9 @@
 
 <https://interspock.github.io/isla-poly800>
     a lv2:Plugin , lv2:InstrumentPlugin ;
-    doap:name "ISLA Poly-800 (M1 Architecture Port)" ;
+    doap:name "ISLA Poly-800" ;
     doap:license <https://spdx.org/licenses/GPL-3.0-or-later.html> ;
-    rdfs:comment "Headless free-software Poly-800 architecture port. M1 implements the stock synthesis topology and parameter surface; final calibration is still in progress." ;
+    rdfs:comment "Headless free-software Poly-800 instrument for GNU/Linux/Ardour. M3 adds versioned LV2 state metadata and deterministic utility presets." ;
     lv2:requiredFeature urid:map ;
     lv2:port
         [ a lv2:InputPort , atom:AtomPort ; lv2:index 0 ; lv2:symbol "midi_in" ; lv2:name "MIDI In" ; atom:bufferType atom:Sequence ; atom:supports midi:MidiEvent ] ,
