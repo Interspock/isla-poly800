@@ -21,6 +21,8 @@ Wrapping `bristolpoly800.c` directly would therefore drag a large part of the st
 
 ISLA instead ports/adapts the relevant behaviour into a compact instance-owned core while retaining explicit attribution for Bristol-derived algorithms and routing. The result remains GPL-3.0-or-later.
 
+A second fidelity rule became explicit during M4: Bristol-specific extensions are not automatically treated as stock Korg behaviour. When Bristol exposes controls absent from the original instrument, Korg hardware/owner documentation takes precedence for the stock mode.
+
 ## Behaviour carried into M1
 
 M1 established:
@@ -87,7 +89,7 @@ M2 retains the existing M1/M1.1 implementation because it already matches this s
 
 The verified MG frequency curve, delay ramp and VCF depth scaling remained in place. The absolute MG-to-DCO depth still needed a source/A-B pass because Bristol applies its LFO as multiplicative frequency-buffer modulation after an offset/ramp path.
 
-The stock Poly-800 path instantiates Bristol palette operator 12 (`chorusinit`, implemented in `dimensionD.c`). M2 intentionally left the lightweight M1 chorus in place until the fixed stock setting for the original Poly-800's simple chorus on/off control could be established without guessing.
+The stock Poly-800 path instantiates Bristol palette operator 12 (`chorusinit`, implemented in `dimensionD.c`). M2 intentionally left the lightweight M1 chorus in place rather than assume that Bristol's extended Dimension controls represented the fixed Korg chorus.
 
 Those two items became M4.
 
@@ -115,32 +117,34 @@ M4 reproduces that multiplicative path. At large P83 values this is intentionall
 
 P81 was already correct in M2: `0.1 + value^3 * 20 Hz` from `lfo.c`. P82 was also correct: normalized 0..1 becomes 0..15 seconds delay with a matching fade duration. P84 already carried Bristol's `value^2 * 8` coefficient; M4 feeds it the corrected unipolar LFO bus as Bristol does.
 
-## M4 Dimension chorus calibration
+## M4 chorus correction: Bristol extension vs stock Korg
 
-The Bristol palette is significant here:
+Bristol's Poly-800 requests palette operator 12 (`chorusinit`, `dimensionD.c`). That operator has a 4096-sample history, interpolated variable delay, sine-driven scan, feedback and moving stereo wet gain.
 
-- operator 12 = `chorusinit` from `dimensionD.c`;
-- operator 13 = `vchorusinit`.
+The Brighton frontend also exposes four chorus-related slots:
 
-`bristolPoly800Init()` requests operator 12. The Poly-800 therefore uses the Dimension implementation, not `vibrachorus.c`.
+- P48: stock-visible Chorus ON/OFF;
+- 58: Bristol-only speed control;
+- 68: Bristol-only depth control;
+- 78: Bristol-only stereo/scan control.
 
-`dimensionD.c` uses a 4096-sample history buffer, interpolated variable-delay read position, sine-driven scan, feedback, and complementary stereo wet gains.
+The first M4 pass froze 58/68/78 to values present in Bristol memories 11/12/13. In Ardour this produced a conspicuous periodic sweep. Source reinspection explained the result: with those values `dimensionD.c` makes a large variable-delay excursion and feeds the wet signal back into its history. This is coherent Bristol Dimension behaviour, but the hidden controls themselves are extensions and therefore do not establish stock Korg calibration.
 
-Brighton exposes Bristol-only hidden controls for speed/depth/scan (DE58/68/78), while the stock-visible P48 remains the chorus switch. ISLA deliberately does not add those hidden extension parameters to the stock program surface.
+The original MkI hardware instead has a fixed analog BBD chorus. Korg service documentation identifies the MN3209 BBD and MN3102 clock driver; the instrument exposes only P48 ON/OFF. The ISLA stock path therefore no longer ports Bristol's hidden Dimension settings.
 
-Bristol's supplied `memory/poly800` directory contains only programs 11, 12, 13 and 15. Programs 11/12/13 share these hidden chorus values:
+Current fixed BBD-style approximation:
 
 ```text
-speed = 0.104142368
-depth = 0.713488936
-scan  = 0.159550920
+rate         0.55 Hz
+centre delay 6.8 ms
+mod depth    +/-0.6 ms
+wet/dry      25% / 75%
+feedback     none
 ```
 
-M4 uses those values whenever P48 is ON. These are documented as **Bristol extension defaults**, not claimed Korg factory-program values.
+The implementation uses one per-instance delay history and two complementary read taps for restrained stereo decorrelation. Delay/LFO state keeps advancing through bypass so P48 does not restart the modulation engine.
 
-P48 ON maps to Bristol's effect gain controller at normalized 1.0, which the Dimension operator scales to 1.5 internally. When P48 is OFF, ISLA hard-bypasses the audible effect rather than reproducing Bristol's generic-engine 1.5x dry-gain quirk at gain zero. The effect history and scan still advance internally, so enabling P48 does not artificially restart chorus phase/history.
-
-The M4 chorus path is also explicitly tested at 96 kHz because that is the production AudioLink rate used by ISLA.
+These constants are hardware-informed and intentionally conservative. They can be refined by a controlled capture from real hardware without adding non-stock controls to the LV2 surface.
 
 ## M4 implementation checkpoint
 
@@ -150,7 +154,7 @@ To make the M4 delta easy to audit, the complete M2 synthesis/filter core is fro
 src/poly800_core_m2.inc
 ```
 
-`src/poly800_core.c` includes that checkpoint internally and overrides only construction/rendering needed for the corrected MG and Dimension paths. It is not a runtime dependency, plugin split, or external engine.
+`src/poly800_core.c` includes that checkpoint internally and overrides only construction/rendering needed for the corrected MG and chorus paths. It is not a runtime dependency, plugin split, or external engine.
 
 This structure can be collapsed later once external A/B work stabilizes; during fidelity work it makes accidental changes to already-calibrated M2 DCO/filter behaviour obvious.
 
@@ -167,10 +171,12 @@ This structure can be collapsed later once external A/B work stabilizes; during 
 
 - P83=15 produces materially deeper frequency modulation than P83=0;
 - P48 OFF is true mono/dry output;
-- P48 ON produces finite stereo decorrelation through the Dimension path;
-- the M4 chorus remains finite on the 96 kHz AudioLink path.
+- P48 ON produces finite but restrained stereo decorrelation;
+- a stable C4 keeps approximately its dry zero-crossing density, guarding against the deep-sweep regression found in the first M4 pass;
+- P48 does not cause an excessive level jump/drop;
+- the chorus remains finite on the 96 kHz AudioLink path.
 
-`tools/core_ab_probe.c` renders deterministic, asset-free metrics for P83 0/7/15 and chorus ON. It provides a repeatable protocol for later Bristol/hardware captures without claiming current sample identity.
+`tools/core_ab_probe.c` renders deterministic, asset-free metrics for P83 0/7/15 and stock BBD-style chorus ON. It provides a repeatable protocol for later Bristol/hardware captures without claiming current sample identity.
 
 `tests/core_smoke.c` continues to guard basic sound generation and numerical stability, while `tests/core_bench.c` watches performance.
 
@@ -183,6 +189,7 @@ This structure can be collapsed later once external A/B work stabilizes; during 
 - Bristol process/session management;
 - standalone command-line startup;
 - generic Bristol operator registry/palette;
+- Bristol-only Poly-800 controls in stock mode;
 - proprietary ROMs, firmware, tape dumps or factory assets.
 
 LV2/Ardour owns host integration; the core owns only synthesis state and rendering.
@@ -195,9 +202,9 @@ The design target is safe simultaneous use of multiple plugin instances with dif
 
 ## Fidelity strategy
 
-M2 and M4 are **source-level calibration milestones**, not a claim of sample-identical Bristol or hardware output. Verified source mappings are implemented first; audible constants are changed only when there is a reproducible reason to change them.
+M2 and M4 are calibration milestones, not a claim of sample-identical Bristol or hardware output. Bristol remains a strong oracle where its model follows stock controls/architecture; original hardware documentation and later hardware captures take precedence where Bristol adds capabilities absent from the Korg.
 
-M4.1 can now use `core_ab_probe` as the fixed protocol for external Bristol/reference/hardware measurements. That work should focus on residual output scaling and waveform/filter character rather than reopening already-source-verified controller mappings without evidence.
+M4.1 can use `core_ab_probe` plus hardware/reference recordings to refine residual output scaling, chorus constants and waveform/filter character without reopening already-source-verified controller mappings without evidence.
 
 ## Licensing/provenance rules
 
