@@ -6,3 +6,59 @@
 <https://interspock.github.io/isla-poly800#bank-factory-mk1>
     a pset:Bank ;
     rdfs:label "Korg Poly-800 MkI Factory Programs" .
+
+<https://interspock.github.io/isla-poly800#factory-11>
+    a pset:Preset ;
+    lv2:appliesTo <https://interspock.github.io/isla-poly800> ;
+    pset:bank <https://interspock.github.io/isla-poly800#bank-factory-mk1> ;
+    rdfs:label "11 Strings" ;
+    lv2:port
+        [ lv2:symbol "gain" ; pset:value 0.32 ] ,
+        [ lv2:symbol "tune" ; pset:value 0.0 ] ,
+        [ lv2:symbol "p11_dco1_octave" ; pset:value 3 ] ,
+        [ lv2:symbol "p12_dco1_waveform" ; pset:value 2 ] ,
+        [ lv2:symbol "p13_dco1_h16" ; pset:value 0 ] ,
+        [ lv2:symbol "p14_dco1_h8" ; pset:value 1 ] ,
+        [ lv2:symbol "p15_dco1_h4" ; pset:value 1 ] ,
+        [ lv2:symbol "p16_dco1_h2" ; pset:value 1 ] ,
+        [ lv2:symbol "p17_dco1_level" ; pset:value 16 ] ,
+        [ lv2:symbol "p18_dco_mode" ; pset:value 2 ] ,
+        [ lv2:symbol "p21_dco2_octave" ; pset:value 3 ] ,
+        [ lv2:symbol "p22_dco2_waveform" ; pset:value 2 ] ,
+        [ lv2:symbol "p23_dco2_h16" ; pset:value 0 ] ,
+        [ lv2:symbol "p24_dco2_h8" ; pset:value 1 ] ,
+        [ lv2:symbol "p25_dco2_h4" ; pset:value 1 ] ,
+        [ lv2:symbol "p26_dco2_h2" ; pset:value 1 ] ,
+        [ lv2:symbol "p27_dco2_level" ; pset:value 16 ] ,
+        [ lv2:symbol "p31_dco2_interval" ; pset:value 0 ] ,
+        [ lv2:symbol "p32_dco2_detune" ; pset:value 2 ] ,
+        [ lv2:symbol "p33_noise" ; pset:value 0 ] ,
+        [ lv2:symbol "p41_vcf_cutoff" ; pset:value 69 ] ,
+        [ lv2:symbol "p42_vcf_resonance" ; pset:value 0 ] ,
+        [ lv2:symbol "p43_vcf_keytrack" ; pset:value 0 ] ,
+        [ lv2:symbol "p44_vcf_polarity" ; pset:value 1 ] ,
+        [ lv2:symbol "p45_vcf_env" ; pset:value 0 ] ,
+        [ lv2:symbol "p46_vcf_trigger" ; pset:value 2 ] ,
+        [ lv2:symbol "p48_chorus" ; pset:value 1 ] ,
+        [ lv2:symbol "p51_deg1_attack" ; pset:value 13 ] ,
+        [ lv2:symbol "p52_deg1_decay" ; pset:value 31 ] ,
+        [ lv2:symbol "p53_deg1_breakpoint" ; pset:value 14 ] ,
+        [ lv2:symbol "p54_deg1_slope" ; pset:value 31 ] ,
+        [ lv2:symbol "p55_deg1_sustain" ; pset:value 31 ] ,
+        [ lv2:symbol "p56_deg1_release" ; pset:value 22 ] ,
+        [ lv2:symbol "p61_deg2_attack" ; pset:value 18 ] ,
+        [ lv2:symbol "p62_deg2_decay" ; pset:value 31 ] ,
+        [ lv2:symbol "p63_deg2_breakpoint" ; pset:value 31 ] ,
+        [ lv2:symbol "p64_deg2_slope" ; pset:value 31 ] ,
+        [ lv2:symbol "p65_deg2_sustain" ; pset:value 31 ] ,
+        [ lv2:symbol "p66_deg2_release" ; pset:value 20 ] ,
+        [ lv2:symbol "p71_deg3_attack" ; pset:value 7 ] ,
+        [ lv2:symbol "p72_deg3_decay" ; pset:value 16 ] ,
+        [ lv2:symbol "p73_deg3_breakpoint" ; pset:value 29 ] ,
+        [ lv2:symbol "p74_deg3_slope" ; pset:value 25 ] ,
+        [ lv2:symbol "p75_deg3_sustain" ; pset:value 10 ] ,
+        [ lv2:symbol "p76_deg3_release" ; pset:value 20 ] ,
+        [ lv2:symbol "p81_mg_frequency" ; pset:value 7 ] ,
+        [ lv2:symbol "p82_mg_delay" ; pset:value 6 ] ,
+        [ lv2:symbol "p83_mg_dco" ; pset:value 1 ] ,
+        [ lv2:symbol "p84_mg_vcf" ; pset:value 0 ] .
