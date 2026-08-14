@@ -41,13 +41,30 @@ static int finite_buffer(const float* x, int count)
     return 1;
 }
 
+/*
+ * Estimate frequency from the average spacing of positive zero crossings.
+ * Using first/last crossing is much more precise than integer crossings/sec
+ * for the small 0..20-cent Poly-800 detune range.
+ */
 static double crossing_frequency(const float* x, int from, int to)
 {
+    int first = -1;
+    int last = -1;
     int crossings = 0;
-    for (int i = from + 1; i < to; ++i)
-        if (x[i - 1] <= 0.0f && x[i] > 0.0f)
+
+    for (int i = from + 1; i < to; ++i) {
+        if (x[i - 1] <= 0.0f && x[i] > 0.0f) {
+            if (first < 0)
+                first = i;
+            last = i;
             ++crossings;
-    return (double)crossings * RATE / (double)(to - from);
+        }
+    }
+
+    if (crossings < 2 || last <= first)
+        return 0.0;
+
+    return (double)(crossings - 1) * RATE / (double)(last - first);
 }
 
 static int render(const Poly800Params* params, float* out)
@@ -128,7 +145,10 @@ int main(void)
         return 4;
     }
 
-    /* Isolate DCO2 and verify P32 reaches roughly one semitone at value 3. */
+    /*
+     * Isolate DCO2. Korg specifies P32 as 0..3 with -20 cents maximum;
+     * detune is downward because the hardware thins clock pulses.
+     */
     poly800_params_default(&params);
     params.master_gain = 0.1f;
     params.dco_mode = 2;
@@ -163,11 +183,27 @@ int main(void)
     params.dco2_detune = 3;
     render(&params, b);
     const double f0 = crossing_frequency(a, RATE / 2, RATE);
-    const double f1 = crossing_frequency(b, RATE / 2, RATE);
-    printf("detune crossings %.2f -> %.2f ratio %.5f\n", f0, f1, f1 / f0);
-    if (f1 / f0 < 1.04 || f1 / f0 > 1.08) {
-        fprintf(stderr, "P32 detune not near one semitone\n");
+    const double f3 = crossing_frequency(b, RATE / 2, RATE);
+    const double ratio3 = f3 / f0;
+    const double expected3 = exp2(-20.0 / 1200.0);
+    printf("detune P32=3 %.3f -> %.3f Hz ratio %.6f expected %.6f\n",
+           f0, f3, ratio3, expected3);
+    if (!(f3 < f0) || fabs(ratio3 - expected3) > 0.003) {
+        fprintf(stderr, "P32 detune endpoint is not about -20 cents\n");
         return 5;
+    }
+
+    /* Factory 84 uses P32=2: expect about -13.33 cents, not +66 cents. */
+    params.dco2_detune = 2;
+    render(&params, b);
+    const double f2 = crossing_frequency(b, RATE / 2, RATE);
+    const double ratio2 = f2 / f0;
+    const double expected2 = exp2((-20.0 * 2.0 / 3.0) / 1200.0);
+    printf("detune P32=2 %.3f -> %.3f Hz ratio %.6f expected %.6f\n",
+           f0, f2, ratio2, expected2);
+    if (!(f2 < f0) || fabs(ratio2 - expected2) > 0.003) {
+        fprintf(stderr, "P32=2 is not about -13.33 cents\n");
+        return 6;
     }
 
     /* AudioLink path: exercise Bristol's >=88 kHz filter branch at 96 kHz. */
@@ -179,7 +215,7 @@ int main(void)
 
     Poly800Core* high = poly800_core_create(96000.0);
     if (!high)
-        return 6;
+        return 7;
     poly800_params_default(&params);
     params.dco_mode = 2;
     params.dco2_h8 = 1;
@@ -200,7 +236,7 @@ int main(void)
     if (!finite_buffer(high_l, HIGH_N) || !finite_buffer(high_r, HIGH_N)) {
         fprintf(stderr, "non-finite 96 kHz output\n");
         poly800_core_destroy(high);
-        return 7;
+        return 8;
     }
     printf("96 kHz filter branch finite\n");
     poly800_core_destroy(high);
