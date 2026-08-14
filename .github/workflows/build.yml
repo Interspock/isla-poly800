@@ -15,6 +15,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake pkg-config lv2-dev lilv-utils
 
+      - name: Validate factory preset sources
+        run: python3 tools/generate_factory_presets.py --check
+
       - name: Configure Release
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
@@ -37,7 +40,9 @@ jobs:
           test -f build/isla-poly800.lv2/isla-poly800.ttl
           test -f build/isla-poly800.lv2/state.ttl
           test -f build/isla-poly800.lv2/presets.ttl
+          test -f build/isla-poly800.lv2/factory-presets.ttl
           test "$(grep -c 'a pset:Preset' build/isla-poly800.lv2/presets.ttl)" -eq 2
+          grep -q 'Korg Poly-800 MkI Factory Programs' build/isla-poly800.lv2/factory-presets.ttl
           rm -rf /tmp/isla-lv2path
           mkdir -p /tmp/isla-lv2path
           cp -a build/isla-poly800.lv2 /tmp/isla-lv2path/
