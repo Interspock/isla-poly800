@@ -15,14 +15,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake pkg-config lv2-dev
 
-      - name: Configure
-        run: cmake -S . -B build
+      - name: Configure Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: cmake --build build --verbose
 
       - name: Test DSP core
         run: ctest --test-dir build --output-on-failure
+
+      - name: Benchmark DSP core
+        run: ./build/core_bench
 
       - name: Check LV2 bundle
         run: |
