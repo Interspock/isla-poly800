@@ -4,13 +4,13 @@ Headless, native GNU/Linux LV2 instrument implementing the Korg Poly-800 synthes
 
 ## Status
 
-**Milestone 4 — Bristol MG/chorus calibration + reproducible A/B probe.**
+**Milestone 4 — MG calibration + stock chorus calibration + reproducible A/B probe.**
 
-M0 validated the LV2/MIDI/audio path in Ardour. M1 implemented the Poly-800 topology and parameter surface. M1.1 made the DSP suitable for real-time use on older ISLA hardware. M2 moved the actual synthesis behaviour closer to Bristol's GPL Poly-800 implementation. M3 made persistence explicit with LV2 State and deterministic presets. M4 closes the two source-level behaviours intentionally left provisional in M2: MG-to-DCO depth/routing and the stock-visible chorus path.
+M0 validated the LV2/MIDI/audio path in Ardour. M1 implemented the Poly-800 topology and parameter surface. M1.1 made the DSP suitable for real-time use on older ISLA hardware. M2 moved the actual synthesis behaviour closer to Bristol's GPL Poly-800 implementation. M3 made persistence explicit with LV2 State and deterministic presets. M4 closes the two behaviours intentionally left provisional in M2: MG-to-DCO depth/routing and the stock-visible chorus path.
 
 M4 does not change the LV2 URI or port layout and preserves M3 state/preset behaviour. Existing host integration therefore remains structurally compatible.
 
-The emulator is still **not a claim of circuit-perfect, bit-identical, or sample-identical Poly-800 hardware emulation**. M4 adds a deterministic asset-free probe so broader comparison against Bristol renders and real/reference Poly-800 captures can be performed reproducibly rather than by guesswork.
+The emulator is still **not a claim of circuit-perfect, bit-identical, or sample-identical Poly-800 hardware emulation**. M4 adds deterministic tests and an asset-free probe so later comparison against Bristol renders and real/reference Poly-800 captures can be performed reproducibly rather than by guesswork.
 
 ## Synthesis architecture
 
@@ -24,7 +24,7 @@ The emulator is still **not a claim of circuit-perfect, bit-identical, or sample
 - VCF cutoff, resonance, keyboard tracking, envelope polarity/intensity and single/multi trigger.
 - Noise through DEG3.
 - MG/LFO frequency, delay, DCO depth and VCF depth.
-- Chorus on/off.
+- Fixed stock-style BBD chorus on/off.
 - Independent DSP state for every LV2 instance; no mutable DSP globals.
 
 The LV2 exposes the original sound-program parameter numbers (11..84) directly through Ardour's generic editor. MIDI-specific original parameters 86..88 are intentionally omitted because the DAW owns MIDI channel/program routing.
@@ -60,21 +60,32 @@ See `docs/m3-state-presets.md` for the persistence model and Ardour acceptance t
 
 ## M4 MG and chorus calibration
 
-M4 returns to the same Bristol source baseline and resolves the two M2.1 items from source rather than choosing values by ear.
+MG calibration follows the Bristol source baseline:
 
 - P81 remains Bristol's cubic LFO law: `0.1 + value^3 * 20 Hz`.
 - P82 remains Bristol's 0..15 second delay followed by an equal-duration fade-in.
-- P83 now follows Bristol's `value^2 * 4` modulation coefficient.
+- P83 follows Bristol's `value^2 * 4` modulation coefficient.
 - Bristol offsets its sine LFO by +1 before the delayed gain DCA, so the DCO/VCF modulation bus is unipolar: `(1 + sine) * fade_gain`.
 - DCO frequency follows Bristol's multiplicative `frequency *= 1 + lfo_bus * vcomod` path. High P83 values are therefore intentionally much deeper than conventional vibrato-in-semitones controls.
-- P84 retains Bristol's `value^2 * 8` coefficient and now receives that same unipolar LFO bus.
-- P48 uses an adaptation of Bristol palette operator 12 (`chorusinit`, `dimensionD.c`) rather than the temporary M1 dual-tap chorus.
-- Bristol-only hidden speed/depth/scan controls remain hidden; with P48 ON they use the common values carried by Bristol's supplied programs 11/12/13.
-- P48 OFF is an audible hard bypass, while the effect history/scan continues internally so switching it on does not restart the modulation engine from phase zero.
+- P84 retains Bristol's `value^2 * 8` coefficient and receives that same unipolar LFO bus.
 
-See `docs/m4-ab-calibration.md` for formulas, hidden-default provenance and the A/B protocol.
+The chorus required a different fidelity decision. Bristol adds hidden editable speed/depth/scan controls (58/68/78) that do not exist on the stock Poly-800. An initial literal Dimension port using those hidden values produced an obvious sweep in Ardour. The MkI Korg hardware instead uses a fixed MN3209/MN3102 BBD chorus controlled only by P48.
 
-`tests/core_m4.c` locks the new modulation scale, dry bypass, stereo chorus behaviour and the 96 kHz AudioLink path.
+The stock path now uses a conservative fixed BBD-style approximation:
+
+```text
+rate         0.55 Hz
+centre delay 6.8 ms
+mod depth    +/-0.6 ms
+wet/dry      25% / 75%
+feedback     none
+```
+
+It keeps the dry signal present, adds restrained complementary stereo delay taps, and keeps delay/LFO state running through bypass. The constants are hardware-informed calibration values and can be refined later from a real-hardware capture without exposing non-stock controls.
+
+See `docs/m4-ab-calibration.md` and `docs/bristol-port-notes.md` for the source decision and regression protocol.
+
+`tests/core_m4.c` locks the MG modulation scale, dry bypass, restrained stereo chorus behaviour, an anti-sweep zero-crossing guard, level sanity and the 96 kHz AudioLink path.
 
 ## Reproducible A/B probe
 
@@ -84,7 +95,7 @@ M4 adds:
 ./build/core_ab_probe
 ```
 
-It renders a fixed C4 program at 48 kHz and prints RMS, zero-crossing count and stereo-difference RMS for dry P83=0/7/15 and chorus ON. The probe uses no proprietary audio assets; its output is intended as a stable experiment protocol for future Bristol/hardware comparisons.
+It renders a fixed C4 program at 48 kHz and prints RMS, zero-crossing count and stereo-difference RMS for dry P83=0/7/15 and the stock BBD-style chorus. The probe uses no proprietary audio assets; its output is intended as a stable experiment protocol for future Bristol/hardware comparisons.
 
 ## Performance
 
@@ -156,7 +167,7 @@ tools/core_ab_probe.c     deterministic M4 A/B metrics
 
 ## Provenance
 
-The Poly-800 routing, NRO controller behaviour, ENV5S rate law, filter implementation, LFO routing and Dimension chorus are informed by/adapted from Bristol's GPL implementation by Nick Copeland. The port deliberately does not vendor Bristol's standalone engine, Brighton GUI, JACK/ALSA code or IPC architecture. See `docs/bristol-port-notes.md` and `docs/m4-ab-calibration.md` for the exact upstream baseline and porting notes.
+The Poly-800 routing, NRO controller behaviour, ENV5S rate law, filter implementation and MG/LFO routing are informed by/adapted from Bristol's GPL implementation by Nick Copeland. The fixed chorus path is hardware-informed from the original Korg MkI BBD architecture rather than Bristol's non-stock hidden Dimension controls. The port deliberately does not vendor Bristol's standalone engine, Brighton GUI, JACK/ALSA code or IPC architecture. See `docs/bristol-port-notes.md` and `docs/m4-ab-calibration.md` for the exact baseline and porting notes.
 
 No Korg ROMs, firmware, cassette images or other proprietary assets are required or distributed.
 
@@ -167,7 +178,7 @@ No Korg ROMs, firmware, cassette images or other proprietary assets are required
 - **M1.1:** Release build defaults + real-time DSP optimisation + benchmark — complete.
 - **M2:** Bristol source-level parameter/behaviour calibration + regression tests — complete.
 - **M3:** versioned LV2 state interface + deterministic preset workflow + restore tests — complete and validated in Ardour.
-- **M4:** Bristol MG/chorus source calibration + deterministic A/B infrastructure — current.
+- **M4:** Bristol MG calibration + corrected fixed stock-style chorus + deterministic A/B infrastructure — current.
 - **M4.1:** controlled external A/B against Bristol renders and/or hardware/reference captures.
 - **M5:** reproducible factory-patch data, subject to asset/licensing verification.
 - **M6:** optional refinements; custom GUI remains non-essential.
