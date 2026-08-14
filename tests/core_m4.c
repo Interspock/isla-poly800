@@ -34,19 +34,25 @@ static int finite_stereo(const float* l, const float* r, uint32_t n)
     return 1;
 }
 
-static void render_case(Poly800Params p, float* l, float* r)
+static void render_case_at(Poly800Params p, double rate,
+    float* l, float* r, uint32_t frames)
 {
-    Poly800Core* core = poly800_core_create(48000.0);
+    Poly800Core* core = poly800_core_create(rate);
     if (!core) {
-        fprintf(stderr, "create failed\n");
+        fprintf(stderr, "create failed at %.0f Hz\n", rate);
         exit(2);
     }
     poly800_core_set_params(core, &p);
     poly800_core_note_on(core, 60, 100);
-    memset(l, 0, FRAMES * sizeof(float));
-    memset(r, 0, FRAMES * sizeof(float));
-    poly800_core_render(core, l, r, FRAMES);
+    memset(l, 0, frames * sizeof(float));
+    memset(r, 0, frames * sizeof(float));
+    poly800_core_render(core, l, r, frames);
     poly800_core_destroy(core);
+}
+
+static void render_case(Poly800Params p, float* l, float* r)
+{
+    render_case_at(p, 48000.0, l, r, FRAMES);
 }
 
 int main(void)
@@ -113,7 +119,14 @@ int main(void)
         return 1;
     }
 
-    printf("M4 calibration OK: zc MG0=%u MG15=%u stereo-delta=%.9g energy=%.9g\n",
+    /* AudioLink production path: exercise the M4 chorus on Bristol's >=88k VCF branch. */
+    render_case_at(p, 96000.0, l1, r1, FRAMES);
+    if (!finite_stereo(l1, r1, FRAMES)) {
+        fprintf(stderr, "96 kHz M4 chorus produced non-finite output\n");
+        return 1;
+    }
+
+    printf("M4 calibration OK: zc MG0=%u MG15=%u stereo-delta=%.9g energy=%.9g; 96k finite\n",
            z0, z1, stereo_delta, energy(l1, FRAMES));
 
     free(l0); free(r0); free(l1); free(r1);
