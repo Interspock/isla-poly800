@@ -8,9 +8,11 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 find_package(PkgConfig REQUIRED)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 pkg_check_modules(LV2 REQUIRED lv2)
 
 set(BUNDLE_DIR "${CMAKE_BINARY_DIR}/isla-poly800.lv2")
+set(FACTORY_PRESETS_TTL "${BUNDLE_DIR}/factory-presets.ttl")
 file(MAKE_DIRECTORY "${BUNDLE_DIR}")
 
 add_library(isla_poly800 MODULE
@@ -40,9 +42,23 @@ configure_file(lv2/manifest.ttl "${BUNDLE_DIR}/manifest.ttl" COPYONLY)
 configure_file(lv2/isla-poly800.ttl "${BUNDLE_DIR}/isla-poly800.ttl" COPYONLY)
 configure_file(lv2/state.ttl "${BUNDLE_DIR}/state.ttl" COPYONLY)
 configure_file(lv2/presets.ttl "${BUNDLE_DIR}/presets.ttl" COPYONLY)
-configure_file(lv2/factory-presets.ttl "${BUNDLE_DIR}/factory-presets.ttl" COPYONLY)
 
-add_custom_target(bundle ALL DEPENDS isla_poly800)
+# Factory preset Turtle is generated from the compact, reviewable 64x47 CSV.
+# The large generated file is a build artifact rather than duplicated source.
+add_custom_command(
+    OUTPUT "${FACTORY_PRESETS_TTL}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_factory_presets.py"
+            --require-complete
+            --output "${FACTORY_PRESETS_TTL}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_factory_presets.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/factory/poly800-mk1-catalog.csv"
+        "${CMAKE_CURRENT_SOURCE_DIR}/factory/poly800-mk1-verified.csv"
+    VERBATIM
+)
+add_custom_target(factory_presets ALL DEPENDS "${FACTORY_PRESETS_TTL}")
+add_custom_target(bundle ALL DEPENDS isla_poly800 factory_presets)
 
 install(DIRECTORY "${BUNDLE_DIR}/"
         DESTINATION "lib/lv2/isla-poly800.lv2")
