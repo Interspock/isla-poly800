@@ -1,0 +1,5 @@
+@prefix lv2:   <http://lv2plug.in/ns/lv2core#> .
+@prefix state: <http://lv2plug.in/ns/ext/state#> .
+
+<https://interspock.github.io/isla-poly800>
+    lv2:extensionData state:interface .
