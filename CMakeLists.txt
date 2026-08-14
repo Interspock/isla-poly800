@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(isla_poly800 VERSION 0.1.1 LANGUAGES C)
+project(isla_poly800 VERSION 0.2.0 LANGUAGES C)
 
 # Audio DSP should not accidentally ship as an unoptimised debug-style build.
 # Users can still explicitly request Debug/RelWithDebInfo when needed.
@@ -54,6 +54,16 @@ target_include_directories(core_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_options(core_smoke PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(core_smoke PRIVATE m)
 add_test(NAME core_smoke COMMAND core_smoke)
+
+add_executable(core_calibration
+    tests/core_calibration.c
+    src/poly800_core.c
+)
+target_compile_features(core_calibration PRIVATE c_std_99)
+target_include_directories(core_calibration PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_compile_options(core_calibration PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(core_calibration PRIVATE m)
+add_test(NAME core_calibration COMMAND core_calibration)
 
 add_executable(core_bench
     tests/core_bench.c
