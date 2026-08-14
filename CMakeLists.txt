@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(isla_poly800 VERSION 0.2.0 LANGUAGES C)
+project(isla_poly800 VERSION 0.3.0 LANGUAGES C)
 
 # Audio DSP should not accidentally ship as an unoptimised debug-style build.
 # Users can still explicitly request Debug/RelWithDebInfo when needed.
@@ -38,6 +38,8 @@ set_target_properties(isla_poly800 PROPERTIES
 
 configure_file(lv2/manifest.ttl "${BUNDLE_DIR}/manifest.ttl" COPYONLY)
 configure_file(lv2/isla-poly800.ttl "${BUNDLE_DIR}/isla-poly800.ttl" COPYONLY)
+configure_file(lv2/state.ttl "${BUNDLE_DIR}/state.ttl" COPYONLY)
+configure_file(lv2/presets.ttl "${BUNDLE_DIR}/presets.ttl" COPYONLY)
 
 add_custom_target(bundle ALL DEPENDS isla_poly800)
 
@@ -64,6 +66,25 @@ target_include_directories(core_calibration PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/
 target_compile_options(core_calibration PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(core_calibration PRIVATE m)
 add_test(NAME core_calibration COMMAND core_calibration)
+
+add_executable(lv2_state_smoke
+    tests/lv2_state_smoke.c
+    src/isla_poly800.c
+    src/poly800_core.c
+)
+target_compile_features(lv2_state_smoke PRIVATE c_std_99)
+target_include_directories(lv2_state_smoke PRIVATE
+    ${LV2_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_compile_options(lv2_state_smoke PRIVATE
+    ${LV2_CFLAGS_OTHER}
+    -Wall
+    -Wextra
+    -Wpedantic
+)
+target_link_libraries(lv2_state_smoke PRIVATE m)
+add_test(NAME lv2_state_smoke COMMAND lv2_state_smoke)
 
 add_executable(core_bench
     tests/core_bench.c
