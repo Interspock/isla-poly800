@@ -2,51 +2,74 @@
 @prefix doap: <http://usefulinc.com/ns/doap#> .
 @prefix lv2:  <http://lv2plug.in/ns/lv2core#> .
 @prefix midi: <http://lv2plug.in/ns/ext/midi#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix urid: <http://lv2plug.in/ns/ext/urid#> .
 
 <https://interspock.github.io/isla-poly800>
     a lv2:Plugin , lv2:InstrumentPlugin ;
-    doap:name "ISLA Poly-800 (M0 Smoke Test)" ;
+    doap:name "ISLA Poly-800 (M1 Architecture Port)" ;
     doap:license <https://spdx.org/licenses/GPL-3.0-or-later.html> ;
-    rdfs:comment "Headless LV2 smoke-test instrument. This milestone validates MIDI, audio and generic host controls; it is not yet a Poly-800 emulation." ;
+    rdfs:comment "Headless free-software Poly-800 architecture port. M1 implements the stock synthesis topology and parameter surface; final calibration is still in progress." ;
     lv2:requiredFeature urid:map ;
     lv2:port
-        [
-            a lv2:InputPort , atom:AtomPort ;
-            lv2:index 0 ;
-            lv2:symbol "midi_in" ;
-            lv2:name "MIDI In" ;
-            atom:bufferType atom:Sequence ;
-            atom:supports midi:MidiEvent
-        ] ,
-        [
-            a lv2:OutputPort , lv2:AudioPort ;
-            lv2:index 1 ;
-            lv2:symbol "audio_l" ;
-            lv2:name "Audio Left"
-        ] ,
-        [
-            a lv2:OutputPort , lv2:AudioPort ;
-            lv2:index 2 ;
-            lv2:symbol "audio_r" ;
-            lv2:name "Audio Right"
-        ] ,
-        [
-            a lv2:InputPort , lv2:ControlPort ;
-            lv2:index 3 ;
-            lv2:symbol "gain" ;
-            lv2:name "Gain" ;
-            lv2:default 0.20 ;
-            lv2:minimum 0.0 ;
-            lv2:maximum 1.0
-        ] ,
-        [
-            a lv2:InputPort , lv2:ControlPort ;
-            lv2:index 4 ;
-            lv2:symbol "tune" ;
-            lv2:name "Fine Tune (cents)" ;
-            lv2:default 0.0 ;
-            lv2:minimum -100.0 ;
-            lv2:maximum 100.0
-        ] .
+        [ a lv2:InputPort , atom:AtomPort ; lv2:index 0 ; lv2:symbol "midi_in" ; lv2:name "MIDI In" ; atom:bufferType atom:Sequence ; atom:supports midi:MidiEvent ] ,
+        [ a lv2:OutputPort , lv2:AudioPort ; lv2:index 1 ; lv2:symbol "audio_l" ; lv2:name "Audio Left" ] ,
+        [ a lv2:OutputPort , lv2:AudioPort ; lv2:index 2 ; lv2:symbol "audio_r" ; lv2:name "Audio Right" ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 3 ; lv2:symbol "gain" ; lv2:name "Master Gain" ; lv2:default 0.32 ; lv2:minimum 0 ; lv2:maximum 1 ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 4 ; lv2:symbol "tune" ; lv2:name "Fine Tune (cents)" ; lv2:default 0 ; lv2:minimum -100 ; lv2:maximum 100 ] ,
+
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 5 ; lv2:symbol "p11_dco1_octave" ; lv2:name "11 DCO1 Octave" ; lv2:default 2 ; lv2:minimum 1 ; lv2:maximum 3 ; lv2:portProperty lv2:integer , lv2:enumeration ; lv2:scalePoint [ rdfs:label "Low" ; rdf:value 1 ] , [ rdfs:label "Middle" ; rdf:value 2 ] , [ rdfs:label "High" ; rdf:value 3 ] ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 6 ; lv2:symbol "p12_dco1_waveform" ; lv2:name "12 DCO1 Waveform" ; lv2:default 1 ; lv2:minimum 1 ; lv2:maximum 2 ; lv2:portProperty lv2:integer , lv2:enumeration ; lv2:scalePoint [ rdfs:label "Square" ; rdf:value 1 ] , [ rdfs:label "Saw/Step" ; rdf:value 2 ] ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 7 ; lv2:symbol "p13_dco1_h16" ; lv2:name "13 DCO1 16'" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 1 ; lv2:portProperty lv2:integer , lv2:toggled ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 8 ; lv2:symbol "p14_dco1_h8" ; lv2:name "14 DCO1 8'" ; lv2:default 1 ; lv2:minimum 0 ; lv2:maximum 1 ; lv2:portProperty lv2:integer , lv2:toggled ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 9 ; lv2:symbol "p15_dco1_h4" ; lv2:name "15 DCO1 4'" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 1 ; lv2:portProperty lv2:integer , lv2:toggled ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 10 ; lv2:symbol "p16_dco1_h2" ; lv2:name "16 DCO1 2'" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 1 ; lv2:portProperty lv2:integer , lv2:toggled ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 11 ; lv2:symbol "p17_dco1_level" ; lv2:name "17 DCO1 Level" ; lv2:default 31 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 12 ; lv2:symbol "p18_dco_mode" ; lv2:name "18 DCO Mode" ; lv2:default 1 ; lv2:minimum 1 ; lv2:maximum 2 ; lv2:portProperty lv2:integer , lv2:enumeration ; lv2:scalePoint [ rdfs:label "WHOLE (8 voices)" ; rdf:value 1 ] , [ rdfs:label "DOUBLE (4 voices)" ; rdf:value 2 ] ] ,
+
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 13 ; lv2:symbol "p21_dco2_octave" ; lv2:name "21 DCO2 Octave" ; lv2:default 2 ; lv2:minimum 1 ; lv2:maximum 3 ; lv2:portProperty lv2:integer , lv2:enumeration ; lv2:scalePoint [ rdfs:label "Low" ; rdf:value 1 ] , [ rdfs:label "Middle" ; rdf:value 2 ] , [ rdfs:label "High" ; rdf:value 3 ] ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 14 ; lv2:symbol "p22_dco2_waveform" ; lv2:name "22 DCO2 Waveform" ; lv2:default 1 ; lv2:minimum 1 ; lv2:maximum 2 ; lv2:portProperty lv2:integer , lv2:enumeration ; lv2:scalePoint [ rdfs:label "Square" ; rdf:value 1 ] , [ rdfs:label "Saw/Step" ; rdf:value 2 ] ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 15 ; lv2:symbol "p23_dco2_h16" ; lv2:name "23 DCO2 16'" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 1 ; lv2:portProperty lv2:integer , lv2:toggled ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 16 ; lv2:symbol "p24_dco2_h8" ; lv2:name "24 DCO2 8'" ; lv2:default 1 ; lv2:minimum 0 ; lv2:maximum 1 ; lv2:portProperty lv2:integer , lv2:toggled ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 17 ; lv2:symbol "p25_dco2_h4" ; lv2:name "25 DCO2 4'" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 1 ; lv2:portProperty lv2:integer , lv2:toggled ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 18 ; lv2:symbol "p26_dco2_h2" ; lv2:name "26 DCO2 2'" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 1 ; lv2:portProperty lv2:integer , lv2:toggled ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 19 ; lv2:symbol "p27_dco2_level" ; lv2:name "27 DCO2 Level" ; lv2:default 24 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 20 ; lv2:symbol "p31_dco2_interval" ; lv2:name "31 DCO2 Interval" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 12 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 21 ; lv2:symbol "p32_dco2_detune" ; lv2:name "32 DCO2 Detune" ; lv2:default 1 ; lv2:minimum 0 ; lv2:maximum 3 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 22 ; lv2:symbol "p33_noise" ; lv2:name "33 Noise" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 15 ; lv2:portProperty lv2:integer ] ,
+
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 23 ; lv2:symbol "p41_vcf_cutoff" ; lv2:name "41 VCF Cutoff" ; lv2:default 62 ; lv2:minimum 0 ; lv2:maximum 99 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 24 ; lv2:symbol "p42_vcf_resonance" ; lv2:name "42 VCF Resonance" ; lv2:default 2 ; lv2:minimum 0 ; lv2:maximum 15 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 25 ; lv2:symbol "p43_vcf_keytrack" ; lv2:name "43 VCF Keyboard Track" ; lv2:default 1 ; lv2:minimum 0 ; lv2:maximum 2 ; lv2:portProperty lv2:integer , lv2:enumeration ; lv2:scalePoint [ rdfs:label "Off" ; rdf:value 0 ] , [ rdfs:label "Half" ; rdf:value 1 ] , [ rdfs:label "Full" ; rdf:value 2 ] ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 26 ; lv2:symbol "p44_vcf_polarity" ; lv2:name "44 VCF Envelope Polarity" ; lv2:default 2 ; lv2:minimum 1 ; lv2:maximum 2 ; lv2:portProperty lv2:integer , lv2:enumeration ; lv2:scalePoint [ rdfs:label "Inverted" ; rdf:value 1 ] , [ rdfs:label "Normal" ; rdf:value 2 ] ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 27 ; lv2:symbol "p45_vcf_env" ; lv2:name "45 VCF Envelope Intensity" ; lv2:default 4 ; lv2:minimum 0 ; lv2:maximum 15 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 28 ; lv2:symbol "p46_vcf_trigger" ; lv2:name "46 VCF Envelope Trigger" ; lv2:default 1 ; lv2:minimum 1 ; lv2:maximum 2 ; lv2:portProperty lv2:integer , lv2:enumeration ; lv2:scalePoint [ rdfs:label "Single" ; rdf:value 1 ] , [ rdfs:label "Multi" ; rdf:value 2 ] ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 29 ; lv2:symbol "p48_chorus" ; lv2:name "48 Chorus" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 1 ; lv2:portProperty lv2:integer , lv2:toggled ] ,
+
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 30 ; lv2:symbol "p51_deg1_attack" ; lv2:name "51 DEG1 Attack" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 31 ; lv2:symbol "p52_deg1_decay" ; lv2:name "52 DEG1 Decay" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 32 ; lv2:symbol "p53_deg1_breakpoint" ; lv2:name "53 DEG1 Breakpoint" ; lv2:default 31 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 33 ; lv2:symbol "p54_deg1_slope" ; lv2:name "54 DEG1 Slope" ; lv2:default 8 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 34 ; lv2:symbol "p55_deg1_sustain" ; lv2:name "55 DEG1 Sustain" ; lv2:default 24 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 35 ; lv2:symbol "p56_deg1_release" ; lv2:name "56 DEG1 Release" ; lv2:default 8 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 36 ; lv2:symbol "p61_deg2_attack" ; lv2:name "61 DEG2 Attack" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 37 ; lv2:symbol "p62_deg2_decay" ; lv2:name "62 DEG2 Decay" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 38 ; lv2:symbol "p63_deg2_breakpoint" ; lv2:name "63 DEG2 Breakpoint" ; lv2:default 31 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 39 ; lv2:symbol "p64_deg2_slope" ; lv2:name "64 DEG2 Slope" ; lv2:default 8 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 40 ; lv2:symbol "p65_deg2_sustain" ; lv2:name "65 DEG2 Sustain" ; lv2:default 24 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 41 ; lv2:symbol "p66_deg2_release" ; lv2:name "66 DEG2 Release" ; lv2:default 8 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 42 ; lv2:symbol "p71_deg3_attack" ; lv2:name "71 DEG3 Attack" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 43 ; lv2:symbol "p72_deg3_decay" ; lv2:name "72 DEG3 Decay" ; lv2:default 8 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 44 ; lv2:symbol "p73_deg3_breakpoint" ; lv2:name "73 DEG3 Breakpoint" ; lv2:default 24 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 45 ; lv2:symbol "p74_deg3_slope" ; lv2:name "74 DEG3 Slope" ; lv2:default 8 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 46 ; lv2:symbol "p75_deg3_sustain" ; lv2:name "75 DEG3 Sustain" ; lv2:default 18 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 47 ; lv2:symbol "p76_deg3_release" ; lv2:name "76 DEG3 Release" ; lv2:default 8 ; lv2:minimum 0 ; lv2:maximum 31 ; lv2:portProperty lv2:integer ] ,
+
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 48 ; lv2:symbol "p81_mg_frequency" ; lv2:name "81 MG Frequency" ; lv2:default 4 ; lv2:minimum 0 ; lv2:maximum 15 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 49 ; lv2:symbol "p82_mg_delay" ; lv2:name "82 MG Delay" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 15 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 50 ; lv2:symbol "p83_mg_dco" ; lv2:name "83 MG DCO Depth" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 15 ; lv2:portProperty lv2:integer ] ,
+        [ a lv2:InputPort , lv2:ControlPort ; lv2:index 51 ; lv2:symbol "p84_mg_vcf" ; lv2:name "84 MG VCF Depth" ; lv2:default 0 ; lv2:minimum 0 ; lv2:maximum 15 ; lv2:portProperty lv2:integer ] .

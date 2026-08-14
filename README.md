@@ -1,27 +1,35 @@
 # ISLA Poly-800
 
-Headless, native GNU/Linux LV2 instrument project aimed at a free-software emulation of the Korg Poly-800 architecture for the ISLA DAW environment.
+Headless, native GNU/Linux LV2 instrument implementing the Korg Poly-800 synthesis architecture for the ISLA DAW environment.
 
 ## Status
 
-**Milestone 0 — LV2 host smoke test.**
+**Milestone 1 — architecture port.**
 
-The first implementation is intentionally **not yet a Poly-800 emulation**. It is a minimal LV2 instrument used to validate the complete host path:
+Milestone 0 validated the complete host path on the real ISLA machine: Ardour discovered the LV2 bundle, received MIDI, produced audio and exposed generic host controls.
 
-`MIDI -> LV2 instrument -> audio -> Ardour generic controls`
+M1 replaces the M0 sine smoke-test engine with a dedicated, per-instance Poly-800 core. It implements the characteristic architecture and stock parameter model while keeping the LV2 wrapper host-native and GUI-free.
 
-Once that path is proven on the ISLA machine, the next milestone is to extract/adapt the Poly-800 DSP from Bristol and replace the smoke-test oscillator while keeping the LV2 wrapper small and host-native.
+M1 is **not yet a claim of calibrated/bit-accurate emulation**. Exact DCO behaviour, detune, modulation depth, filter scaling and chorus constants will be compared against Bristol and hardware documentation in later milestones.
 
-## Principles
+## M1 synthesis architecture
 
-- Free/open-source software only.
-- Native GNU/Linux; no Wine, yabridge or proprietary runtime.
-- No custom GUI required: Ardour's generic plugin editor is the initial UI.
-- Reproducible build and installation.
-- Preserve provenance and upstream license notices for adapted Bristol code.
-- No proprietary ROMs or other non-redistributable assets.
+- WHOLE mode: 8 voices, one DCO/DEG per voice.
+- DOUBLE mode: 4 voices, two DCO/DEG paths per voice.
+- DCO footages 16', 8', 4' and 2'.
+- Square and saw/step harmonic weighting modes.
+- DCO2 interval and detune.
+- Three six-stage DEGs (Attack, Decay, Break Point, Slope, Sustain, Release).
+- One shared/paraphonic VCF and DEG3 path by default, matching the original architecture.
+- VCF cutoff, resonance, keyboard tracking, envelope polarity/intensity and single/multi trigger.
+- Noise through DEG3.
+- MG/LFO frequency, delay, DCO depth and VCF depth.
+- Chorus on/off.
+- Independent state for every LV2 instance; no mutable DSP globals.
 
-## Build (Milestone 0)
+The LV2 exposes the original sound-program parameter numbers (11..84) directly through Ardour's generic editor. MIDI-specific original parameters 86..88 are intentionally omitted because the DAW owns MIDI channel/program routing.
+
+## Build
 
 Requirements on Debian/Ubuntu/Mint:
 
@@ -29,42 +37,61 @@ Requirements on Debian/Ubuntu/Mint:
 sudo apt install build-essential cmake pkg-config lv2-dev
 ```
 
-Build:
+Build and test:
 
 ```bash
 git clone https://github.com/Interspock/isla-poly800.git
 cd isla-poly800
 cmake -S . -B build
 cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
-The build produces a complete bundle at:
+The build produces:
 
 ```text
 build/isla-poly800.lv2/
+├── isla-poly800.so
+├── isla-poly800.ttl
+└── manifest.ttl
 ```
 
-Install it for the current user using the standard LV2 user path:
+Install for the current user:
 
 ```bash
 mkdir -p ~/.lv2
+rm -rf ~/.lv2/isla-poly800.lv2
 cp -a build/isla-poly800.lv2 ~/.lv2/
 ```
 
-Then rescan plugins in Ardour and look for **ISLA Poly-800 (M0 Smoke Test)** as a MIDI instrument.
+Then rescan plugins in Ardour and look for **ISLA Poly-800 (M1 Architecture Port)** as a MIDI instrument.
+
+## Source layout
+
+```text
+src/isla_poly800.c     LV2/MIDI host glue only
+src/poly800_core.c     per-instance synthesis core
+src/poly800_core.h     core API and stock parameter model
+lv2/                   LV2 metadata / generic controls
+tests/core_smoke.c     headless DSP smoke/stress test
+```
+
+## Provenance
+
+The Poly-800 routing, envelope-rate behaviour and filter implementation are informed by/adapted from Bristol's GPL implementation by Nick Copeland. The port deliberately does not vendor Bristol's standalone engine, Brighton GUI, JACK/ALSA code or IPC architecture. See `docs/bristol-port-notes.md` for the exact upstream baseline and porting notes.
+
+No Korg ROMs, firmware, cassette images or other proprietary assets are required or distributed.
 
 ## Milestones
 
-- **M0:** compilable headless LV2, MIDI note input, audio output, generic parameters.
-- **M1:** Bristol Poly-800 DSP extraction/adaptation.
-- **M2:** expose the original Poly-800 parameter set through LV2 control ports.
-- **M3:** reliable per-instance state/save/restore inside Ardour sessions.
-- **M4:** compare behaviour/output against Bristol and correct regressions.
+- **M0:** headless LV2 host smoke test — complete and validated in Ardour.
+- **M1:** Poly-800 architecture core + original parameter surface — current.
+- **M2:** parameter/behaviour calibration and broader automated DSP tests.
+- **M3:** explicit LV2 state/preset workflow and reliable save/restore validation.
+- **M4:** A/B comparison against Bristol/reference recordings and fidelity corrections.
 - **M5:** reproducible factory-patch data, subject to asset/licensing verification.
 - **M6:** optional refinements; custom GUI remains non-essential.
 
-See `docs/architecture.md` and `docs/bristol-port-notes.md`.
-
 ## License
 
-Project-original code is released under **GPL-3.0-or-later**. Code adapted from Bristol will retain its original copyright and GPL notices. See `LICENSE` and `docs/bristol-port-notes.md`.
+GPL-3.0-or-later. Bristol-derived/adapted portions retain Bristol attribution and GPL-compatible licensing. See `LICENSE` and `docs/bristol-port-notes.md`.

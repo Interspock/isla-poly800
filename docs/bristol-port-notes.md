@@ -1,61 +1,69 @@
 # Bristol port notes
 
-## Upstream reference
+## Upstream baseline
 
-The planned DSP source is Bristol, specifically the Poly-800 algorithm in `bristol/bristolpoly800.c` from the Bristol 0.60.11 source line.
+Bristol is the principal free-software implementation used as the behavioural/code reference for the Poly-800 architecture.
 
-Relevant upstream project:
+Reference mirror/baseline used for M1 inspection:
 
-- Bristol: https://sourceforge.net/projects/bristol/
-- Poly-800 documentation: https://bristol.sourceforge.net/poly800.html
+- repository: `nomadbyte/bristol-fixes`
+- branch: `develop`
+- commit: `116fb8a2d21727676e21db5f1efe295c1ea22d61`
+- relevant files: `bristol/bristolpoly800.c`, `bristol/bristolpoly800.h`, `bristol/nro.c`, `bristol/env5stage.c`, `bristol/filter.c`, `bristol/lfo.c`, `brighton/brightonPoly800.c`
 
-No Bristol source code is vendored in this repository at Milestone 0.
+The original Bristol Poly-800 source is Copyright (c) Nick Copeland <nickycopeland@hotmail.com> 1996,2012 and is distributed under GPL version 3 or later.
 
-## Licensing/provenance
+## Why M1 is not a mechanical Bristol wrapper
 
-The Bristol Poly-800 source carries a GNU GPL notice permitting redistribution/modification under GPL version 3 or, at the recipient's option, any later version. When Bristol-derived code enters this repository:
+Inspection of `bristolPoly800Init()` shows that the Poly-800 algorithm depends on nine generic Bristol operators plus the effect system: two NRO oscillators, one filter, one noise generator, three five/six-stage envelope operators, one DCA, one LFO and vibrachorus.
 
-1. retain the original Bristol copyright and license notice in every derived file;
-2. mark substantial ISLA modifications clearly;
-3. keep project-original wrapper code under GPL-3.0-or-later for compatibility;
-4. record the exact upstream release/commit used as the extraction baseline;
-5. do not import ROM dumps, factory cassette images, firmware or other assets merely because they are downloadable.
+Wrapping `bristolpoly800.c` directly would therefore drag a large part of the standalone Bristol engine and its internal voice/operator model into the plugin. That would defeat the architectural goal of a small, safe LV2 core and preserve assumptions that are undesirable inside a multi-instance DAW host.
 
-## What to reuse
+M1 instead ports/adapts the relevant behaviour into a compact instance-owned core while retaining explicit attribution for Bristol-derived algorithms and routing. The result remains GPL-3.0-or-later.
 
-The useful part of Bristol is the synthesis implementation and the common operators required by that implementation, expected to include some combination of:
+## Bristol behaviour carried into M1
 
-- Poly-800 orchestration;
-- oscillator/tone generation;
-- ADBSSR envelope behaviour;
-- shared/paraphonic filter path;
-- LFO;
-- noise;
-- amplifier stage;
-- chorus/effect components where required for faithful stock behaviour;
-- voice/note bookkeeping needed by the algorithm.
+The current core is specifically informed by/adapts:
 
-## What not to port
+- Poly-800 WHOLE/DOUBLE voice topology and shared-filter routing from `bristolpoly800.c`;
+- Bristol's six-stage envelope rate law from `env5stage.c`;
+- the shared Chamberlin-style filter state/routing from `filter.c`;
+- MG/LFO rate-shape ideas from `lfo.c` and the Poly-800 controller mappings;
+- original parameter ranges/operator mappings documented in `brightonPoly800.c`.
 
-Do not carry the standalone application architecture into the plugin:
+The DCO implementation is deliberately self-contained rather than importing Bristol's entire NRO operator framework. It follows the Poly-800's four-footage construction and provides a band-limited square building block suitable for the plugin architecture. Exact waveform parity remains a later calibration task.
+
+## What is intentionally not ported
 
 - Brighton GUI;
 - JACK/ALSA device handling;
 - external MIDI device handling;
 - GUI/engine IPC;
-- process/session management;
-- standalone command-line startup.
+- Bristol process/session management;
+- standalone command-line startup;
+- generic Bristol operator registry/palette;
+- proprietary ROMs, firmware, tape dumps or factory assets.
 
-LV2/Ardour already owns those responsibilities.
+LV2/Ardour owns host integration; `poly800_core.c` owns only synthesis state and rendering.
 
-## Known technical risk
+## Global-state risk and resolution
 
-Bristol's Poly-800 implementation comments explicitly warn about Poly-800 global buffers and multiple audio threads. The LV2 port must therefore avoid a mechanical wrapper around the old global state.
+Bristol's Poly-800 source contains an explicit warning about global/shared buffers and multiple audio threads. ISLA Poly-800 resolves this structurally: every mutable field is owned by `Poly800Core`, including voices, phases, all envelopes, the shared VCF, LFO, RNG and chorus delay.
 
-The extraction should progressively move mutable state into an instance-owned structure. The first correctness test after the real DSP works will be running two independent plugin instances with different patches and verifying that neither modifies the other's sound/state.
+The design target is therefore safe simultaneous use of multiple plugin instances with different programs.
 
 ## Fidelity strategy
 
-Do not rewrite the synthesis from scratch during M1. First make a minimally invasive, auditable extraction that can be compared against stock Bristol. Refactor only after behavioural equivalence is established.
+M1 is an **architecture port**, not a claim of sample-identical Bristol output. This is deliberate and documented in the plugin name while calibration is incomplete.
 
-Reference sources such as service documentation, HAWK-800 work, and hardware-analysis projects may be used to understand the original machine, but code is only reusable when its license is explicit and compatible.
+The next fidelity work should compare isolated subsystems and complete patches against Bristol/reference material, then adjust constants without reintroducing Bristol's standalone architecture. Priority areas are DCO waveform/harmonic weighting, DCO2 detune, DEG timing curves, VCF scaling, MG curves and chorus timing/mix.
+
+## Licensing/provenance rules
+
+For all future changes:
+
+1. retain Bristol copyright/license attribution in files containing Bristol-derived code;
+2. record the exact upstream source/commit for any newly adapted algorithm;
+3. keep project-original wrapper/core additions GPL-3.0-or-later;
+4. never assume downloadable patches/ROMs/dumps are redistributable merely because they are publicly accessible;
+5. keep the build reproducible without proprietary assets.
