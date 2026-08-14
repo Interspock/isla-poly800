@@ -84,8 +84,8 @@ static void m4_chorus_tick(Poly800Core* core, float mono,
     chorus->delay[histin] = mono;
 
     const float depth = P800_M4_CHORUS_DEPTH * 1024.0f;
-    const float speed_hz = 0.1f + P800_M4_CHORUS_SPEED * 20.0f;
-    const float speed = 1024.0f * speed_hz / (float)core->sample_rate;
+    /* Poly-800 controller 100 writes SPEED directly, bypassing chorus param(). */
+    const float speed = P800_M4_CHORUS_SPEED;
     const float gain = core->params.chorus_on ? P800_M4_CHORUS_GAIN : 0.0f;
     const float scan = P800_M4_CHORUS_SCAN * 0.0005f * gain;
 
