@@ -3,12 +3,18 @@
  * ISLA Poly-800 M4 calibration layer.
  *
  * Keep the M2 synthesis/filter core frozen below and override only the two
- * behaviours whose Bristol mappings were deliberately left provisional:
+ * behaviours whose mappings were deliberately left provisional:
  * P83 MG->DCO and the P48 chorus effect.
  *
- * Bristol source baseline:
+ * MG source baseline:
  *   nomadbyte/bristol-fixes @ 116fb8a2d21727676e21db5f1efe295c1ea22d61
- *   bristolpoly800.c, lfo.c, dimensionD.c, brightonPoly800.c
+ *   bristolpoly800.c, lfo.c
+ *
+ * Chorus source references:
+ *   Korg Poly-800 service/owner manuals for the fixed MN3209/MN3102 BBD
+ *   chorus architecture and stock P48 on/off behaviour.
+ *   Bristol dimensionD.c remains a comparison oracle, but its hidden
+ *   58/68/78 controls are extensions and are not treated as stock settings.
  */
 
 #define poly800_core_create poly800_core_create_m2
@@ -18,18 +24,27 @@
 #undef poly800_core_create
 
 #define P800_M4_CHORUS_HISTORY 4096u
-#define P800_M4_CHORUS_STATE_SLOTS 6u
-#define P800_M4_CHORUS_SPEED 0.104142368f
-#define P800_M4_CHORUS_DEPTH 0.713488936f
-#define P800_M4_CHORUS_SCAN 0.159550920f
-#define P800_M4_CHORUS_GAIN 1.5f
+#define P800_M4_CHORUS_STATE_SLOTS 2u
+
+/*
+ * Hardware-informed fixed chorus constants.
+ *
+ * The MkI Poly-800 uses one MN3209 BBD driven by an MN3102 clock and exposes
+ * only chorus ON/OFF. The service manual describes a fixed modulated clock;
+ * the owner manual describes the result as a warm, subtle stereo ambience.
+ *
+ * These constants deliberately model that fixed behaviour rather than
+ * Bristol's editable Dimension extension, whose default memory values create
+ * a much deeper audible delay sweep than the stock instrument.
+ */
+#define P800_M4_CHORUS_RATE_HZ       0.55f
+#define P800_M4_CHORUS_DELAY_SEC     0.0068f
+#define P800_M4_CHORUS_DEPTH_SEC     0.00060f
+#define P800_M4_CHORUS_WET           0.25f
+#define P800_M4_CHORUS_DRY           (1.0f - P800_M4_CHORUS_WET)
 
 enum {
-    CH_STATE_HISTOUT = P800_M4_CHORUS_HISTORY,
-    CH_STATE_SCANR,
-    CH_STATE_SCANP,
-    CH_STATE_CG,
-    CH_STATE_DIR,
+    CH_STATE_PHASE = P800_M4_CHORUS_HISTORY,
     CH_STATE_INIT
 };
 
@@ -48,16 +63,18 @@ static float m4_chorus_sample(const Chorus* chorus, float position)
 }
 
 /*
- * Adaptation of Bristol dimensionD.c (operator 12 / chorusinit).
+ * Fixed MkI-style BBD chorus approximation.
  *
- * The stock Poly-800 exposes only chorus on/off. Bristol has hidden extension
- * controls 58/68/78 for speed/depth/scan. For the headless stock surface we
- * freeze those to the values common to Bristol's shipped poly800 11/12/13
- * memories. P48 remains the sole visible switch.
+ * Important differences from Bristol dimensionD.c:
+ * - no hidden user/editable speed, depth or scan controls;
+ * - no regenerative delay feedback;
+ * - dry signal always remains present when chorus is enabled;
+ * - short, sample-rate-independent BBD-like delay modulation;
+ * - two complementary taps from the same history create a restrained stereo
+ *   image without a conspicuous left/right pan sweep.
  *
- * Bristol keeps the effect's scan/history moving even with its gain control at
- * zero. ISLA does the same internally, but deliberately hard-bypasses the
- * audible 1.5x dry gain quirk while P48 is OFF.
+ * History and LFO phase keep running while P48 is off so switching the chorus
+ * on does not start from an empty delay line.
  */
 static void m4_chorus_tick(Poly800Core* core, float mono,
     float* left, float* right)
@@ -66,75 +83,41 @@ static void m4_chorus_tick(Poly800Core* core, float mono,
     float* st = chorus->delay + P800_M4_CHORUS_HISTORY;
     uint32_t histin = chorus->write_pos;
 
-    float histout = st[CH_STATE_HISTOUT - P800_M4_CHORUS_HISTORY];
-    float scanr = st[CH_STATE_SCANR - P800_M4_CHORUS_HISTORY];
-    float scanp = st[CH_STATE_SCANP - P800_M4_CHORUS_HISTORY];
-    float cg = st[CH_STATE_CG - P800_M4_CHORUS_HISTORY];
-    float dir = st[CH_STATE_DIR - P800_M4_CHORUS_HISTORY];
-
+    float phase = st[CH_STATE_PHASE - P800_M4_CHORUS_HISTORY];
     if (st[CH_STATE_INIT - P800_M4_CHORUS_HISTORY] == 0.0f) {
-        histout = 0.0f;
-        scanr = 0.0f;
-        scanp = 0.0f;
-        cg = 0.0f;
-        dir = 0.0f;
+        phase = 0.0f;
         st[CH_STATE_INIT - P800_M4_CHORUS_HISTORY] = 1.0f;
     }
 
     chorus->delay[histin] = mono;
 
-    const float depth = P800_M4_CHORUS_DEPTH * 1024.0f;
-    /* Poly-800 controller 100 writes SPEED directly, bypassing chorus param(). */
-    const float speed = P800_M4_CHORUS_SPEED;
-    const float gain = core->params.chorus_on ? P800_M4_CHORUS_GAIN : 0.0f;
-    const float scan = P800_M4_CHORUS_SCAN * 0.0005f * gain;
+    const float centre = (float)core->sample_rate * P800_M4_CHORUS_DELAY_SEC;
+    const float depth = (float)core->sample_rate * P800_M4_CHORUS_DEPTH_SEC;
+    const float lfo = sinf(phase);
 
-    const float value = m4_chorus_sample(chorus, histout);
-
-    if (dir == 0.0f) {
-        cg += scan;
-        if (cg > gain) {
-            cg = gain;
-            dir = 1.0f;
-        }
-    } else {
-        cg -= scan;
-        if (cg < 0.0f) {
-            cg = 0.0f;
-            dir = 0.0f;
-        }
-    }
+    const float read_l = (float)histin - (centre + depth * lfo);
+    const float read_r = (float)histin - (centre - depth * lfo);
+    const float wet_l = m4_chorus_sample(chorus, read_l);
+    const float wet_r = m4_chorus_sample(chorus, read_r);
 
     if (core->params.chorus_on) {
-        *right = mono * (1.5f - gain) + value * (gain - cg);
-        *left  = mono * (1.5f - gain) + value * cg;
+        *left = mono * P800_M4_CHORUS_DRY + wet_l * P800_M4_CHORUS_WET;
+        *right = mono * P800_M4_CHORUS_DRY + wet_r * P800_M4_CHORUS_WET;
     } else {
         *left = mono;
         *right = mono;
     }
 
-    chorus->delay[histin] += value * gain * 0.5f;
-
     if (++histin >= P800_M4_CHORUS_HISTORY)
         histin = 0;
 
-    histout = (float)histin - scanp;
-    while (histout < 0.0f)
-        histout += (float)P800_M4_CHORUS_HISTORY;
-    while (histout >= (float)P800_M4_CHORUS_HISTORY)
-        histout -= (float)P800_M4_CHORUS_HISTORY;
-
-    scanr += speed;
-    while (scanr >= 1024.0f)
-        scanr -= 1024.0f;
-    scanp = (sinf((float)P800_TAU * scanr / 1024.0f) + 1.0f) * depth;
+    phase += (float)P800_TAU * P800_M4_CHORUS_RATE_HZ
+           / (float)core->sample_rate;
+    if (phase >= (float)P800_TAU)
+        phase -= (float)P800_TAU;
 
     chorus->write_pos = histin;
-    st[CH_STATE_HISTOUT - P800_M4_CHORUS_HISTORY] = histout;
-    st[CH_STATE_SCANR - P800_M4_CHORUS_HISTORY] = scanr;
-    st[CH_STATE_SCANP - P800_M4_CHORUS_HISTORY] = scanp;
-    st[CH_STATE_CG - P800_M4_CHORUS_HISTORY] = cg;
-    st[CH_STATE_DIR - P800_M4_CHORUS_HISTORY] = dir;
+    st[CH_STATE_PHASE - P800_M4_CHORUS_HISTORY] = phase;
 }
 
 Poly800Core* poly800_core_create(double sample_rate)
