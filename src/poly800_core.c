@@ -4,15 +4,15 @@
  *
  * Keep the M2 synthesis/filter core frozen below and override behaviours where
  * later hardware evidence is stronger than Bristol's extended emulation path:
- * P32 DCO2 detune, P83 MG->DCO and the P48 chorus effect.
+ * stock DCO harmonic weighting, P32 DCO2 detune, P83 MG->DCO and P48 chorus.
  *
  * MG source baseline:
  *   nomadbyte/bristol-fixes @ 116fb8a2d21727676e21db5f1efe295c1ea22d61
  *   bristolpoly800.c, lfo.c
  *
  * Stock-hardware source references:
- *   Korg Poly-800 owner/service manuals for DCO2 detune (-20 cents maximum)
- *   and the fixed MN3209/MN3102 BBD chorus architecture.
+ *   Korg Poly-800 owner/service manuals for the additive square-wave DCO,
+ *   DCO2 detune (-20 cents maximum), and the fixed MN3209/MN3102 BBD chorus.
  *
  * Bristol remains the architecture/code oracle where it follows the stock
  * instrument, but its frontend/extensions do not override explicit Korg
@@ -23,7 +23,9 @@
 #define poly800_core_render poly800_core_render_m2
 #define poly800_core_reset poly800_core_reset_m2
 #define poly800_core_set_params poly800_core_set_params_m2
+#define render_dco render_dco_m2
 #include "poly800_core_m2.inc"
+#undef render_dco
 #undef poly800_core_set_params
 #undef poly800_core_reset
 #undef poly800_core_render
@@ -31,6 +33,41 @@
 
 #define P800_M4_CHORUS_HISTORY 4096u
 #define P800_M4_CHORUS_STATE_SLOTS 2u
+
+/*
+ * Stock MkI DCO harmonic law.
+ *
+ * The Poly-800 does not switch each footage generator between square and saw.
+ * The tone generator always supplies square waves at 16', 8', 4' and 2'.
+ * P12/P22 select the resistor-mix relationship:
+ *
+ *   waveform 1: 1, 1,   1,   1
+ *   waveform 2: 1, 1/2, 1/4, 1/8
+ *
+ * With all four footages enabled the second relationship forms the familiar
+ * stepped approximation to a sawtooth.  This supersedes the M2 provisional
+ * interpretation that rendered four independent saw oscillators.
+ */
+static float render_dco(float phase[P800_HARMONICS],
+    const float increment[P800_HARMONICS],
+    uint8_t mask, int waveform, float pitch_ratio)
+{
+    static const float step_weight[P800_HARMONICS] = {
+        1.0f, 0.5f, 0.25f, 0.125f
+    };
+    float out = 0.0f;
+
+    for (unsigned i = 0; i < P800_HARMONICS; ++i) {
+        if (!(mask & (1u << i)))
+            continue;
+
+        const float inc = increment[i] * pitch_ratio;
+        const float weight = waveform == 2 ? step_weight[i] : 1.0f;
+        out += square_sample(&phase[i], inc)
+             * P800_DCO_HARMONIC_GAIN * weight;
+    }
+    return out;
+}
 
 /*
  * Hardware-informed fixed chorus constants.
