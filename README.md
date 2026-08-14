@@ -4,15 +4,13 @@ Headless, native GNU/Linux LV2 instrument implementing the Korg Poly-800 synthes
 
 ## Status
 
-**Milestone 5 — reproducible MkI factory-preset bank: infrastructure complete, source transcription in progress.**
+**Milestone 5 — complete reproducible Korg Poly-800 MkI factory bank.**
 
-M0 validated the LV2/MIDI/audio path in Ardour. M1 implemented the Poly-800 topology and parameter surface. M1.1 made the DSP suitable for real-time use on older ISLA hardware. M2 moved the actual synthesis behaviour closer to Bristol's GPL Poly-800 implementation. M3 made persistence explicit with LV2 State and deterministic presets. M4 closed MG-to-DCO routing and corrected the stock-visible chorus path. M5 now adds a provenance-aware pipeline for the original 64 MkI factory programs.
-
-The M5 generator/catalog/validation path is implemented and CI-enforced. The 64 names/slots are catalogued; parameter rows are added only after complete verification against preserved factory sources. Until `python3 tools/generate_factory_presets.py --check --require-complete` passes, the factory bank is explicitly not considered complete.
+M0 validated the LV2/MIDI/audio path in Ardour. M1 implemented the Poly-800 topology and parameter surface. M1.1 made the DSP suitable for real-time use on older ISLA hardware. M2 moved the synthesis behaviour closer to Bristol's GPL Poly-800 implementation. M3 made persistence explicit with LV2 State and deterministic presets. M4 closed MG-to-DCO routing and corrected the stock-visible chorus path. M5 adds all 64 original MkI factory programs from a checksum-valid factory cassette decode, independently cross-checked against the preserved three-sheet settings spreadsheet.
 
 The LV2 URI and port layout remain unchanged and M3 state/preset behaviour is preserved.
 
-The emulator is still **not a claim of circuit-perfect, bit-identical, or sample-identical Poly-800 hardware emulation**. The M4 probe and M5 factory-program pipeline are intended to make later A/B comparison against real/reference Poly-800 captures reproducible rather than subjective guesswork.
+The emulator is still **not a claim of circuit-perfect, bit-identical, or sample-identical Poly-800 hardware emulation**. The M4 probe and M5 same-patch bank now give us a reproducible basis for controlled A/B comparison against real/reference Poly-800 captures.
 
 ## Synthesis architecture
 
@@ -68,10 +66,10 @@ MG calibration follows the Bristol source baseline:
 - P82 remains Bristol's 0..15 second delay followed by an equal-duration fade-in.
 - P83 follows Bristol's `value^2 * 4` modulation coefficient.
 - Bristol offsets its sine LFO by +1 before the delayed gain DCA, so the DCO/VCF modulation bus is unipolar: `(1 + sine) * fade_gain`.
-- DCO frequency follows Bristol's multiplicative `frequency *= 1 + lfo_bus * vcomod` path. High P83 values are therefore intentionally much deeper than conventional vibrato-in-semitones controls.
+- DCO frequency follows Bristol's multiplicative `frequency *= 1 + lfo_bus * vcomod` path.
 - P84 retains Bristol's `value^2 * 8` coefficient and receives that same unipolar LFO bus.
 
-The chorus required a different fidelity decision. Bristol adds hidden editable speed/depth/scan controls (58/68/78) that do not exist on the stock Poly-800. An initial literal Dimension port using those hidden values produced an obvious sweep in Ardour. The MkI Korg hardware instead uses a fixed MN3209/MN3102 BBD chorus controlled only by P48.
+The chorus required a different fidelity decision. Bristol adds hidden editable speed/depth/scan controls (58/68/78) that do not exist on the stock Poly-800. An initial literal Dimension port produced an obvious sweep in Ardour. The MkI Korg hardware instead uses a fixed MN3209/MN3102 BBD chorus controlled only by P48.
 
 The stock path now uses a conservative fixed BBD-style approximation:
 
@@ -83,40 +81,38 @@ wet/dry      25% / 75%
 feedback     none
 ```
 
-It keeps the dry signal present, adds restrained complementary stereo delay taps, and keeps delay/LFO state running through bypass. The constants are hardware-informed calibration values and can be refined later from a real-hardware capture without exposing non-stock controls.
-
 See `docs/m4-ab-calibration.md` and `docs/bristol-port-notes.md` for the source decision and regression protocol.
 
-`tests/core_m4.c` locks the MG modulation scale, dry bypass, restrained stereo chorus behaviour, an anti-sweep zero-crossing guard, level sanity and the 96 kHz AudioLink path.
+## M5 factory preset bank
 
-## M5 factory preset pipeline
+M5 provides the full **64-program Korg Poly-800 MkI factory bank**.
 
-M5 deliberately separates **factory facts** from third-party/Korg source assets.
+- `factory/poly800-mk1-catalog.csv` contains all original program slots/names.
+- `factory/poly800-mk1-verified.csv` contains all 64 x 47 stock sound-parameter values.
+- The numeric source of truth is a fully framed, checksum-valid decode of a preserved original-factory cassette image.
+- `tools/decode_poly800_factory_tape.py` reproduces that decode from an external `.sdp` or mono PCM16 WAV without third-party Python dependencies.
+- The preserved three-sheet `Poly-800 11-88.xls` independently cross-checks the decode: 2780 numeric cells agree exactly; 46 cells contain human transcription/column-shift discrepancies and 182 inactive/don't-care cells are marked `x`.
+- The checksum-valid cassette is authoritative for those discrepancies and also recovers the stored DCO2/DEG2 values hidden by `x` in WHOLE-mode spreadsheet rows.
+- `tools/generate_factory_presets.py` validates all ranges/completeness and converts the compact CSV to LV2 presets.
+- CMake generates `build/isla-poly800.lv2/factory-presets.ttl` at build time; the roughly 200 kB generated Turtle is deliberately not duplicated as source in Git.
+- Every factory preset sets all 47 stock sound controls plus deterministic project controls `gain=0.32` and `tune=0.0`.
+- CI requires all 64 programs and checks that Lilv discovers the first and last factory presets.
 
-- `factory/poly800-mk1-catalog.csv` contains the 64 original program slots/names, 11..88 using digits 1..8.
-- `factory/poly800-mk1-verified.csv` is the canonical table for complete, verified parameter transcriptions.
-- `tools/generate_factory_presets.py` validates every row and generates `lv2/factory-presets.ttl`.
-- Every generated factory preset writes all 49 plugin controls deterministically: the 47 stock sound parameters plus project-level `gain=0.32` and `tune=0.0`.
-- Partial programs, duplicates, invalid slots and values outside parameter ranges are rejected.
-- Program locations 86/87/88 are valid presets; they are distinct from original MIDI/global parameter numbers 86..88, which remain outside the plugin's sound-program state.
-- CI runs the generator in `--check` mode so checked-in LV2 data cannot drift from the canonical table.
-- Korg scans/manuals, cassette WAVs, ROM/firmware and raw dumps are not vendored merely because they are publicly downloadable.
-
-The source archive identifies both `Poly-800 11-88.xls` (original MkI names/settings) and a six-page high-resolution preload patch sheet. Those sources are used for transcription/cross-checking, not copied into the repository.
-
-Development check:
-
-```bash
-python3 tools/generate_factory_presets.py --check
-```
-
-M5 completion gate:
+Source-data validation:
 
 ```bash
 python3 tools/generate_factory_presets.py --check --require-complete
 ```
 
-See `factory/README.md` for provenance and redistribution rules.
+Optional reproduction from an external factory cassette package:
+
+```bash
+python3 tools/decode_poly800_factory_tape.py Poly-800_Factory.sdp \
+    -o /tmp/poly800-decoded.csv
+cmp /tmp/poly800-decoded.csv factory/poly800-mk1-verified.csv
+```
+
+No Korg scans/manuals, cassette WAVs, SoundDiviner packages, ROM/firmware or raw binary dumps are vendored. See `factory/README.md` for hashes, provenance and the decoding method.
 
 ## Reproducible A/B probe
 
@@ -126,13 +122,13 @@ M4 adds:
 ./build/core_ab_probe
 ```
 
-It renders a fixed C4 program at 48 kHz and prints RMS, zero-crossing count and stereo-difference RMS for dry P83=0/7/15 and the stock BBD-style chorus. The probe uses no proprietary audio assets; its output is intended as a stable experiment protocol for future Bristol/hardware comparisons.
+It renders a fixed C4 program at 48 kHz and prints RMS, zero-crossing count and stereo-difference RMS for dry P83=0/7/15 and the stock BBD-style chorus.
 
-After the M5 bank is complete, the same factory program numbers can be rendered by ISLA and by a real Poly-800 under an identical MIDI protocol for M5.1/M4.1 A/B work.
+With M5 complete, the same factory program number can now be selected on ISLA and on real/reference hardware under an identical MIDI/rendering protocol for the next A/B stage.
 
 ## Performance
 
-The project defaults to a Release build when using a single-config generator such as Unix Makefiles. A small core benchmark is included so the same scenarios can be compared on the actual ISLA machines:
+The project defaults to a Release build when using a single-config generator such as Unix Makefiles. A core benchmark is included:
 
 ```bash
 ./build/core_bench
@@ -145,7 +141,7 @@ It reports WHOLE 1/4/8 voices and DOUBLE 1/4 voices with and without chorus. Ben
 Requirements on Debian/Ubuntu/Mint:
 
 ```bash
-sudo apt install build-essential cmake pkg-config lv2-dev
+sudo apt install build-essential cmake pkg-config lv2-dev python3
 ```
 
 Build and test:
@@ -167,7 +163,7 @@ build/isla-poly800.lv2/
 ├── manifest.ttl
 ├── state.ttl
 ├── presets.ttl
-└── factory-presets.ttl
+└── factory-presets.ttl    # generated from the canonical CSV
 ```
 
 Install for the current user:
@@ -183,32 +179,32 @@ Then restart/rescan Ardour. The plugin URI and port layout are unchanged from M1
 ## Source layout
 
 ```text
-src/isla_poly800.c                 LV2/MIDI glue + versioned state interface
-src/poly800_core.c                 M4 calibration layer
-src/poly800_core_m2.inc            frozen M2 synthesis/filter implementation
-src/poly800_core.h                 core API and stock parameter model
-factory/poly800-mk1-catalog.csv   64 MkI factory program slots/names
-factory/poly800-mk1-verified.csv  canonical verified parameter values
-factory/README.md                  M5 provenance and redistribution policy
-lv2/manifest.ttl                   plugin/preset discovery
-lv2/state.ttl                      LV2 state-interface metadata
-lv2/presets.ttl                    deterministic M3 utility presets
-lv2/factory-presets.ttl            generated M5 factory preset bank
-lv2/isla-poly800.ttl               ports / generic controls
-tests/core_smoke.c                 headless DSP smoke/stress test
-tests/core_calibration.c           M2 fidelity regression tests
-tests/core_m4.c                    M4 MG/chorus + 96 kHz regression tests
-tests/lv2_state_smoke.c            M3 LV2 state save/restore test
-tests/core_bench.c                 reproducible DSP performance benchmark
-tools/core_ab_probe.c              deterministic M4 A/B metrics
-tools/generate_factory_presets.py  M5 validation/generation tool
+src/isla_poly800.c                    LV2/MIDI glue + versioned state interface
+src/poly800_core.c                    M4 calibration layer
+src/poly800_core_m2.inc               frozen M2 synthesis/filter implementation
+src/poly800_core.h                    core API and stock parameter model
+factory/poly800-mk1-catalog.csv       64 MkI factory program slots/names
+factory/poly800-mk1-verified.csv      complete 64 x 47 factory parameter table
+factory/README.md                     M5 provenance, hashes and redistribution policy
+lv2/manifest.ttl                      plugin/preset discovery
+lv2/state.ttl                         LV2 state-interface metadata
+lv2/presets.ttl                       deterministic M3 utility presets
+lv2/isla-poly800.ttl                  ports / generic controls
+tests/core_smoke.c                    headless DSP smoke/stress test
+tests/core_calibration.c              M2 fidelity regression tests
+tests/core_m4.c                       M4 MG/chorus + 96 kHz regression tests
+tests/lv2_state_smoke.c               M3 LV2 state save/restore test
+tests/core_bench.c                    reproducible DSP performance benchmark
+tools/core_ab_probe.c                 deterministic M4 A/B metrics
+tools/decode_poly800_factory_tape.py  reproducible external cassette decoder
+tools/generate_factory_presets.py     M5 validation/LV2 generation tool
 ```
 
 ## Provenance
 
-The Poly-800 routing, NRO controller behaviour, ENV5S rate law, filter implementation and MG/LFO routing are informed by/adapted from Bristol's GPL implementation by Nick Copeland. The fixed chorus path is hardware-informed from the original Korg MkI BBD architecture rather than Bristol's non-stock hidden Dimension controls. The port deliberately does not vendor Bristol's standalone engine, Brighton GUI, JACK/ALSA code or IPC architecture. See `docs/bristol-port-notes.md` and `docs/m4-ab-calibration.md` for the exact baseline and porting notes.
+The Poly-800 routing, NRO controller behaviour, ENV5S rate law, filter implementation and MG/LFO routing are informed by/adapted from Bristol's GPL implementation by Nick Copeland. The fixed chorus path is hardware-informed from the original Korg MkI BBD architecture rather than Bristol's non-stock hidden Dimension controls.
 
-M5 adds only project-original structured transcriptions of factual factory program settings after verification. No Korg ROMs, firmware, cassette images, manual scans or other proprietary source assets are required or distributed.
+M5 adds project-original decoding/generation tools and a structured table of factual factory program settings recovered from independently preserved source material. Proprietary source assets themselves are not required or distributed.
 
 ## Milestones
 
@@ -218,7 +214,7 @@ M5 adds only project-original structured transcriptions of factual factory progr
 - **M2:** Bristol source-level parameter/behaviour calibration + regression tests — complete.
 - **M3:** versioned LV2 state interface + deterministic preset workflow + restore tests — complete and validated in Ardour.
 - **M4:** Bristol MG calibration + corrected fixed stock-style chorus + deterministic A/B infrastructure — complete and validated in Ardour.
-- **M5:** reproducible MkI factory preset pipeline — infrastructure complete; verified 64-program parameter transcription in progress.
+- **M5:** complete checksum-verified 64-program MkI factory bank + reproducible decoder/generator — complete.
 - **M5.1:** controlled same-patch A/B protocol using the completed factory bank.
 - **M4.1:** external A/B against Bristol renders and/or hardware/reference captures.
 - **M6:** optional refinements; custom GUI remains non-essential.
