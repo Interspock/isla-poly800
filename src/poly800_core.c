@@ -55,9 +55,9 @@ static float m4_chorus_sample(const Chorus* chorus, float position)
  * freeze those to the values common to Bristol's shipped poly800 11/12/13
  * memories. P48 remains the sole visible switch.
  *
- * When P48 is off ISLA deliberately hard-bypasses the effect. Bristol's
- * generic effect path with gain=0 has a 1.5 dry coefficient, which is an
- * engine-level gain quirk rather than useful stock-program behaviour.
+ * Bristol keeps the effect's scan/history moving even with its gain control at
+ * zero. ISLA does the same internally, but deliberately hard-bypasses the
+ * audible 1.5x dry gain quirk while P48 is OFF.
  */
 static void m4_chorus_tick(Poly800Core* core, float mono,
     float* left, float* right)
@@ -65,17 +65,6 @@ static void m4_chorus_tick(Poly800Core* core, float mono,
     Chorus* chorus = &core->chorus;
     float* st = chorus->delay + P800_M4_CHORUS_HISTORY;
     uint32_t histin = chorus->write_pos;
-
-    chorus->delay[histin] = mono;
-
-    if (!core->params.chorus_on) {
-        *left = mono;
-        *right = mono;
-        if (++histin >= P800_M4_CHORUS_HISTORY)
-            histin = 0;
-        chorus->write_pos = histin;
-        return;
-    }
 
     float histout = st[CH_STATE_HISTOUT - P800_M4_CHORUS_HISTORY];
     float scanr = st[CH_STATE_SCANR - P800_M4_CHORUS_HISTORY];
@@ -92,10 +81,12 @@ static void m4_chorus_tick(Poly800Core* core, float mono,
         st[CH_STATE_INIT - P800_M4_CHORUS_HISTORY] = 1.0f;
     }
 
+    chorus->delay[histin] = mono;
+
     const float depth = P800_M4_CHORUS_DEPTH * 1024.0f;
     const float speed_hz = 0.1f + P800_M4_CHORUS_SPEED * 20.0f;
     const float speed = 1024.0f * speed_hz / (float)core->sample_rate;
-    const float gain = P800_M4_CHORUS_GAIN;
+    const float gain = core->params.chorus_on ? P800_M4_CHORUS_GAIN : 0.0f;
     const float scan = P800_M4_CHORUS_SCAN * 0.0005f * gain;
 
     const float value = m4_chorus_sample(chorus, histout);
@@ -114,8 +105,13 @@ static void m4_chorus_tick(Poly800Core* core, float mono,
         }
     }
 
-    *right = mono * (1.5f - gain) + value * (gain - cg);
-    *left  = mono * (1.5f - gain) + value * cg;
+    if (core->params.chorus_on) {
+        *right = mono * (1.5f - gain) + value * (gain - cg);
+        *left  = mono * (1.5f - gain) + value * cg;
+    } else {
+        *left = mono;
+        *right = mono;
+    }
 
     chorus->delay[histin] += value * gain * 0.5f;
 
