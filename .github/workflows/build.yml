@@ -24,6 +24,9 @@ jobs:
       - name: Test DSP and LV2 state
         run: ctest --test-dir build --output-on-failure
 
+      - name: A/B calibration probe
+        run: ./build/core_ab_probe
+
       - name: Benchmark DSP core
         run: ./build/core_bench
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(isla_poly800 VERSION 0.3.0 LANGUAGES C)
+project(isla_poly800 VERSION 0.4.0 LANGUAGES C)
 
 # Audio DSP should not accidentally ship as an unoptimised debug-style build.
 # Users can still explicitly request Debug/RelWithDebInfo when needed.
@@ -47,25 +47,26 @@ install(DIRECTORY "${BUNDLE_DIR}/"
         DESTINATION "lib/lv2/isla-poly800.lv2")
 
 enable_testing()
-add_executable(core_smoke
-    tests/core_smoke.c
-    src/poly800_core.c
-)
-target_compile_features(core_smoke PRIVATE c_std_99)
-target_include_directories(core_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_compile_options(core_smoke PRIVATE -Wall -Wextra -Wpedantic)
-target_link_libraries(core_smoke PRIVATE m)
+
+function(add_core_tool target source)
+    add_executable(${target}
+        ${source}
+        src/poly800_core.c
+    )
+    target_compile_features(${target} PRIVATE c_std_99)
+    target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+    target_link_libraries(${target} PRIVATE m)
+endfunction()
+
+add_core_tool(core_smoke tests/core_smoke.c)
 add_test(NAME core_smoke COMMAND core_smoke)
 
-add_executable(core_calibration
-    tests/core_calibration.c
-    src/poly800_core.c
-)
-target_compile_features(core_calibration PRIVATE c_std_99)
-target_include_directories(core_calibration PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_compile_options(core_calibration PRIVATE -Wall -Wextra -Wpedantic)
-target_link_libraries(core_calibration PRIVATE m)
+add_core_tool(core_calibration tests/core_calibration.c)
 add_test(NAME core_calibration COMMAND core_calibration)
+
+add_core_tool(core_m4 tests/core_m4.c)
+add_test(NAME core_m4 COMMAND core_m4)
 
 add_executable(lv2_state_smoke
     tests/lv2_state_smoke.c
@@ -86,11 +87,5 @@ target_compile_options(lv2_state_smoke PRIVATE
 target_link_libraries(lv2_state_smoke PRIVATE m)
 add_test(NAME lv2_state_smoke COMMAND lv2_state_smoke)
 
-add_executable(core_bench
-    tests/core_bench.c
-    src/poly800_core.c
-)
-target_compile_features(core_bench PRIVATE c_std_99)
-target_include_directories(core_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_compile_options(core_bench PRIVATE -Wall -Wextra -Wpedantic)
-target_link_libraries(core_bench PRIVATE m)
+add_core_tool(core_bench tests/core_bench.c)
+add_core_tool(core_ab_probe tools/core_ab_probe.c)
