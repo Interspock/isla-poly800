@@ -80,7 +80,7 @@ int main(void)
     p.mg_dco = 15.0f;
     probe("dry-mg15", p, l, r);
     p.mg_dco = 0.0f; p.chorus_on = 1;
-    probe("dimension-chorus", p, l, r);
+    probe("stock-bbd-chorus", p, l, r);
 
     free(l); free(r);
     return 0;
