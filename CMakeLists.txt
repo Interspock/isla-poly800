@@ -82,6 +82,9 @@ add_test(NAME core_smoke COMMAND core_smoke)
 add_core_tool(core_calibration tests/core_calibration.c)
 add_test(NAME core_calibration COMMAND core_calibration)
 
+add_core_tool(core_host_refresh tests/core_host_refresh.c)
+add_test(NAME core_host_refresh COMMAND core_host_refresh)
+
 add_core_tool(core_m4 tests/core_m4.c)
 add_test(NAME core_m4 COMMAND core_m4)
 
