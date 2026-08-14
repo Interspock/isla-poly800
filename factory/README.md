@@ -23,9 +23,14 @@ Poly-800_Factory.sdp SHA-256
 
 embedded 44.1 kHz mono PCM WAV SHA-256
 b4c32a934b119e96aee9afbe6f0684fc33b07b88aa6adec734dbbb1f78e8ad47
+
+canonical decoded CSV SHA-256
+13027b2b51138456e0d05ed30a893b12f48ff079020e1df444cb5eef59466619
 ```
 
 `tools/decode_poly800_factory_tape.py` demodulates the external WAV/.sdp, validates the serial framing and factory layout, requires the `B3 BF 00` header, and verifies the stored cassette checksum before decoding any presets. The M5 reference image decodes to 1636 bytes with stored/computed checksum `0x87`; its patch payload is exactly 64 x 21 bytes.
+
+The canonical CSV is required to be byte-for-byte the decoder output. An Ardour smoke test of the first M5 bank exposed that an earlier checked-in table did not satisfy that invariant even though it was complete and range-valid. The table was replaced by direct decoder output and CI now locks the SHA-256 above so completeness alone can never mask this class of error again.
 
 No cassette WAV or `.sdp` binary is distributed by this repository.
 
@@ -37,15 +42,7 @@ A preserved three-sheet `Poly-800 11-88.xls` was also inspected. Its SHA-256 was
 b95d64ee9c1d8b459ffbef6c8bde041bb9e9c4cd79477b1dffff0b3501f5283f
 ```
 
-The sheets contain 24 + 24 + 16 programs = 64 total. Against the checksum-valid cassette decode:
-
-```text
-numeric XLS cells matching cassette exactly: 2780
-numeric XLS cells differing:                 46
-XLS don't-care cells marked "x":            182
-```
-
-The mismatches include clear spreadsheet transcription/column-shift errors (for example values impossible for 1/2 controls and envelope values outside 0..31). Therefore the cassette decode is authoritative for numeric values; the XLS is an independent human-readable cross-check and supplies useful evidence for the parameter interpretation. The cassette also preserves the stored DCO2/DEG2 values in programs where the spreadsheet marks those fields `x` because WHOLE mode does not audibly use them.
+The sheets contain 24 + 24 + 16 programs = 64 total. It remains an independent human-readable cross-check for names, parameter interpretation and transcription diagnostics; the checksum-valid cassette decode is authoritative for numeric preset values.
 
 Factory names are cross-checked against the preserved factory-program list/PDF and public MkI listings.
 
@@ -58,13 +55,14 @@ python3 tools/decode_poly800_factory_tape.py Poly-800_Factory.sdp \
     -o /tmp/poly800-decoded.csv
 
 cmp /tmp/poly800-decoded.csv factory/poly800-mk1-verified.csv
+sha256sum /tmp/poly800-decoded.csv
 ```
 
 The decoder uses only the Python standard library.
 
 ## Generating the LV2 bank
 
-The 64-preset Turtle file is deliberately a **build artifact**, not a second 200 kB source-of-truth copy in Git. CMake generates it from the compact CSV during every build:
+The 64-preset Turtle file is deliberately a **build artifact**, not a second source-of-truth copy in Git. CMake generates it from the compact CSV during every build:
 
 ```text
 factory/poly800-mk1-verified.csv
@@ -91,6 +89,8 @@ The validator requires:
 - all 47 stock parameters present in every row;
 - integer values within the original/LV2 ranges;
 - no duplicate or partial programs.
+
+CI additionally validates the canonical CSV SHA-256.
 
 ## Redistribution rule
 
