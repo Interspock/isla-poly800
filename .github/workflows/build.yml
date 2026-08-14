@@ -18,6 +18,9 @@ jobs:
       - name: Validate complete factory preset source
         run: python3 tools/generate_factory_presets.py --check --require-complete
 
+      - name: Verify canonical cassette-derived factory CSV
+        run: echo "13027b2b51138456e0d05ed30a893b12f48ff079020e1df444cb5eef59466619  factory/poly800-mk1-verified.csv" | sha256sum -c -
+
       - name: Configure Release
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
