@@ -35,6 +35,11 @@ jobs:
           test -f build/isla-poly800.lv2/state.ttl
           test -f build/isla-poly800.lv2/presets.ttl
           test "$(grep -c 'a pset:Preset' build/isla-poly800.lv2/presets.ttl)" -eq 2
-          LV2_PATH="$PWD/build" lv2info https://interspock.github.io/isla-poly800 | tee /tmp/isla-lv2info.txt
+          rm -rf /tmp/isla-lv2path
+          mkdir -p /tmp/isla-lv2path
+          cp -a build/isla-poly800.lv2 /tmp/isla-lv2path/
+          LV2_PATH=/tmp/isla-lv2path lv2info https://interspock.github.io/isla-poly800 | tee /tmp/isla-lv2info.txt
           grep -q 'state#interface' /tmp/isla-lv2info.txt
+          grep -q 'Init Whole' /tmp/isla-lv2info.txt
+          grep -q 'Double Fifth Test' /tmp/isla-lv2info.txt
           find build/isla-poly800.lv2 -maxdepth 1 -type f -print
