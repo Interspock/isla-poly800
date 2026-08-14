@@ -64,18 +64,23 @@ enum {
  * thinning clock pulses. The stock LV2 therefore maps 0..3 linearly to
  * 0..-20 cents.
  *
- * The frozen M2 rebuild has already applied Bristol's ratio. Replace only that
- * component here, leaving octave, interval and global tune untouched.
+ * IMPORTANT: this function must be idempotent. LV2 hosts commonly push the
+ * same control values every process block. The first implementation multiplied
+ * the already-corrected ratio again on every block, eventually driving DCO2
+ * towards 0 Hz. Rebuild the absolute stock ratio from program parameters each
+ * time instead of applying a relative multiplier.
  */
 static void apply_stock_dco2_detune(Poly800Core* core)
 {
     const float raw = clampf(core->params.dco2_detune, 0.0f, 3.0f);
-    const double bristol_ratio = dco2_fine_ratio(raw);
     const double cents = -20.0 * (double)raw / 3.0;
     const double stock_ratio = exp2(cents / 1200.0);
+    const double tune_ratio = exp2((double)core->params.tune_cents / 1200.0);
 
-    if (bristol_ratio > 0.0)
-        core->derived.dco2_ratio *= stock_ratio / bristol_ratio;
+    core->derived.dco2_ratio = tune_ratio
+        * ldexp(1.0, core->params.dco2_octave - 2)
+        * exp2((double)core->params.dco2_interval / 12.0)
+        * stock_ratio;
 
     refresh_all_voice_increments(core);
 }
