@@ -16,6 +16,14 @@ static double energy(const float* x, uint32_t n)
     return e;
 }
 
+static double rms_from(const float* x, uint32_t from, uint32_t n)
+{
+    double e = 0.0;
+    for (uint32_t i = from; i < n; ++i)
+        e += (double)x[i] * (double)x[i];
+    return sqrt(e / (double)(n - from));
+}
+
 static unsigned zero_crossings(const float* x, uint32_t n)
 {
     unsigned z = 0;
@@ -115,19 +123,44 @@ int main(void)
         stereo_delta += d * d;
     }
     if (stereo_delta <= 1.0e-8) {
-        fprintf(stderr, "Dimension chorus did not create stereo decorrelation\n");
+        fprintf(stderr, "stock BBD chorus did not create stereo decorrelation\n");
         return 1;
     }
 
-    /* AudioLink production path: exercise the M4 chorus on Bristol's >=88k VCF branch. */
+    /*
+     * P48 must remain a subtle ambience, not become the obvious pitch/delay
+     * sweep produced by Bristol's hidden Dimension controls. A simple stable
+     * C4 should retain approximately the dry zero-crossing density and level.
+     */
+    const unsigned zc_chorus =
+        zero_crossings(l1 + 12000, FRAMES - 12000);
+    const unsigned zc_margin = z0 / 6; /* +/-16.7%; old Dimension path fails. */
+    if (zc_chorus + zc_margin < z0 || zc_chorus > z0 + zc_margin) {
+        fprintf(stderr,
+                "P48 chorus is sweeping pitch too deeply: dry=%u chorus=%u\n",
+                z0, zc_chorus);
+        return 1;
+    }
+
+    const double dry_rms = rms_from(l0, 12000, FRAMES);
+    const double chorus_rms = rms_from(l1, 12000, FRAMES);
+    const double level_ratio = chorus_rms / dry_rms;
+    if (level_ratio < 0.55 || level_ratio > 1.25) {
+        fprintf(stderr,
+                "P48 chorus changed level too aggressively: ratio=%.6f\n",
+                level_ratio);
+        return 1;
+    }
+
+    /* AudioLink production path: exercise M4 on Bristol's >=88k VCF branch. */
     render_case_at(p, 96000.0, l1, r1, FRAMES);
     if (!finite_stereo(l1, r1, FRAMES)) {
         fprintf(stderr, "96 kHz M4 chorus produced non-finite output\n");
         return 1;
     }
 
-    printf("M4 calibration OK: zc MG0=%u MG15=%u stereo-delta=%.9g energy=%.9g; 96k finite\n",
-           z0, z1, stereo_delta, energy(l1, FRAMES));
+    printf("M4 calibration OK: zc MG0=%u MG15=%u chorus=%u level=%.6f stereo-delta=%.9g energy=%.9g; 96k finite\n",
+           z0, z1, zc_chorus, level_ratio, stereo_delta, energy(l1, FRAMES));
 
     free(l0); free(r0); free(l1); free(r1);
     return 0;
