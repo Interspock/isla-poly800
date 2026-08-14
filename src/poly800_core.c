@@ -1,25 +1,31 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
- * ISLA Poly-800 M4 calibration layer.
+ * ISLA Poly-800 M4 calibration layer + stock-hardware corrections.
  *
- * Keep the M2 synthesis/filter core frozen below and override only the two
- * behaviours whose mappings were deliberately left provisional:
- * P83 MG->DCO and the P48 chorus effect.
+ * Keep the M2 synthesis/filter core frozen below and override behaviours where
+ * later hardware evidence is stronger than Bristol's extended emulation path:
+ * P32 DCO2 detune, P83 MG->DCO and the P48 chorus effect.
  *
  * MG source baseline:
  *   nomadbyte/bristol-fixes @ 116fb8a2d21727676e21db5f1efe295c1ea22d61
  *   bristolpoly800.c, lfo.c
  *
- * Chorus source references:
- *   Korg Poly-800 service/owner manuals for the fixed MN3209/MN3102 BBD
- *   chorus architecture and stock P48 on/off behaviour.
- *   Bristol dimensionD.c remains a comparison oracle, but its hidden
- *   58/68/78 controls are extensions and are not treated as stock settings.
+ * Stock-hardware source references:
+ *   Korg Poly-800 owner/service manuals for DCO2 detune (-20 cents maximum)
+ *   and the fixed MN3209/MN3102 BBD chorus architecture.
+ *
+ * Bristol remains the architecture/code oracle where it follows the stock
+ * instrument, but its frontend/extensions do not override explicit Korg
+ * hardware specifications when the two conflict.
  */
 
 #define poly800_core_create poly800_core_create_m2
 #define poly800_core_render poly800_core_render_m2
+#define poly800_core_reset poly800_core_reset_m2
+#define poly800_core_set_params poly800_core_set_params_m2
 #include "poly800_core_m2.inc"
+#undef poly800_core_set_params
+#undef poly800_core_reset
 #undef poly800_core_render
 #undef poly800_core_create
 
@@ -47,6 +53,32 @@ enum {
     CH_STATE_PHASE = P800_M4_CHORUS_HISTORY,
     CH_STATE_INIT
 };
+
+/*
+ * P32 hardware correction.
+ *
+ * Bristol's Brighton shim routes P32 through the positive half of NRO
+ * FINETUNE, which spans roughly +1 semitone. Korg's owner/service manuals
+ * explicitly specify the MkI DCO2 DETUNE control as 0..3 with 20 cents maximum,
+ * and the service description says the hardware detune circuit lowers pitch by
+ * thinning clock pulses. The stock LV2 therefore maps 0..3 linearly to
+ * 0..-20 cents.
+ *
+ * The frozen M2 rebuild has already applied Bristol's ratio. Replace only that
+ * component here, leaving octave, interval and global tune untouched.
+ */
+static void apply_stock_dco2_detune(Poly800Core* core)
+{
+    const float raw = clampf(core->params.dco2_detune, 0.0f, 3.0f);
+    const double bristol_ratio = dco2_fine_ratio(raw);
+    const double cents = -20.0 * (double)raw / 3.0;
+    const double stock_ratio = exp2(cents / 1200.0);
+
+    if (bristol_ratio > 0.0)
+        core->derived.dco2_ratio *= stock_ratio / bristol_ratio;
+
+    refresh_all_voice_increments(core);
+}
 
 static float m4_chorus_sample(const Chorus* chorus, float position)
 {
@@ -118,6 +150,24 @@ static void m4_chorus_tick(Poly800Core* core, float mono,
 
     chorus->write_pos = histin;
     st[CH_STATE_PHASE - P800_M4_CHORUS_HISTORY] = phase;
+}
+
+void poly800_core_set_params(Poly800Core* core, const Poly800Params* params)
+{
+    if (!core || !params)
+        return;
+
+    poly800_core_set_params_m2(core, params);
+    apply_stock_dco2_detune(core);
+}
+
+void poly800_core_reset(Poly800Core* core)
+{
+    if (!core)
+        return;
+
+    poly800_core_reset_m2(core);
+    apply_stock_dco2_detune(core);
 }
 
 Poly800Core* poly800_core_create(double sample_rate)
