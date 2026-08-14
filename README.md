@@ -4,11 +4,13 @@ Headless, native GNU/Linux LV2 instrument implementing the Korg Poly-800 synthes
 
 ## Status
 
-**Milestone 2 — Bristol calibration pass.**
+**Milestone 3 — LV2 state + preset workflow.**
 
-M0 validated the LV2/MIDI/audio path in Ardour. M1 implemented the Poly-800 topology and parameter surface. M1.1 made the DSP suitable for real-time use on older ISLA hardware. M2 now moves the actual synthesis behaviour closer to Bristol's GPL Poly-800 implementation while keeping all state instance-local and the plugin GUI-free.
+M0 validated the LV2/MIDI/audio path in Ardour. M1 implemented the Poly-800 topology and parameter surface. M1.1 made the DSP suitable for real-time use on older ISLA hardware. M2 moved the actual synthesis behaviour closer to Bristol's GPL Poly-800 implementation. M3 now makes persistence explicit: Ardour/session control-port restore remains the source of truth for the sound program, while the plugin exposes a versioned LV2 State interface for future non-port state and ships deterministic LV2 presets for host-level validation.
 
-M2 is still **not a claim of circuit-perfect, bit-identical, or sample-identical emulation**. The verified source-level calibrations in this milestone are DCO waveform selection, additive footages, DCO2 fine detune, shared-filter algorithm/scaling, and the 48/96 kHz filter paths. Absolute MG-DCO depth and the stock chorus constants still need controlled A/B listening/measurement.
+M3 does not change the synthesis topology, DSP calibration or existing LV2 port layout. It is therefore intended to remain compatible with sessions created during M1/M2.
+
+The emulator is still **not a claim of circuit-perfect, bit-identical, or sample-identical Poly-800 emulation**. Absolute MG-DCO depth, stock chorus constants and broader A/B calibration remain later fidelity work.
 
 ## Synthesis architecture
 
@@ -23,7 +25,7 @@ M2 is still **not a claim of circuit-perfect, bit-identical, or sample-identical
 - Noise through DEG3.
 - MG/LFO frequency, delay, DCO depth and VCF depth.
 - Chorus on/off.
-- Independent state for every LV2 instance; no mutable DSP globals.
+- Independent DSP state for every LV2 instance; no mutable DSP globals.
 
 The LV2 exposes the original sound-program parameter numbers (11..84) directly through Ardour's generic editor. MIDI-specific original parameters 86..88 are intentionally omitted because the DAW owns MIDI channel/program routing.
 
@@ -31,17 +33,30 @@ The LV2 exposes the original sound-program parameter numbers (11..84) directly t
 
 The M2 pass was checked against Bristol source at commit `116fb8a2d21727676e21db5f1efe295c1ea22d61`.
 
-- P12/P22 now select actual square or saw generation; M1's temporary "saw/step weighting" interpretation is gone.
+- P12/P22 select actual square or saw generation.
 - The 16'/8'/4'/2' footages are additive, as in Bristol NRO, rather than normalised by the number enabled.
-- P32 DCO2 detune now follows NRO's linear frequency-ratio interpolation from unison to one semitone across values 0..3.
+- P32 DCO2 detune follows NRO's linear frequency-ratio interpolation from unison to one semitone across values 0..3.
 - The oscillator bus follows Bristol's Poly-800 routing gain before the shared filter.
-- The shared VCF now uses Bristol's filter type 4 Huovilainen path rather than M1's lightweight Chamberlin approximation.
-- Below 88 kHz the VCF uses Bristol's internally 2x-oversampled branch; at 88 kHz and above it switches to the high-rate branch. This explicitly covers both 48 kHz testing and the AudioLink 96 kHz path.
+- The shared VCF uses Bristol's filter type 4 Huovilainen path rather than the earlier lightweight Chamberlin approximation.
+- Below 88 kHz the VCF uses Bristol's internally 2x-oversampled branch; at 88 kHz and above it switches to the high-rate branch. This covers both 48 kHz testing and the AudioLink 96 kHz path.
 - VCF cutoff, resonance, keyboard tracking, DEG3 amount/polarity and MG-to-VCF controller scaling follow Bristol's Poly-800 mappings.
-- ENV5S/ADBSSR timing continues to use Bristol's squared-rate law.
+- ENV5S/ADBSSR timing uses Bristol's squared-rate law.
 - M1.1 caches and Release-build optimisation remain in place.
 
 `tests/core_calibration.c` locks the verified behaviour with regression checks for square/saw distinction, additive footages, the P32 detune endpoint, and finite 96 kHz filter operation.
+
+## M3 state and presets
+
+LV2 defines complete plugin persistence as port values plus an optional state dictionary. ISLA Poly-800 follows that model instead of serialising parameters 11..84 twice.
+
+- Ardour/the host saves and restores all LV2 control-port values.
+- `state:interface` stores a portable integer schema marker at `#stateVersion`.
+- Schema 1 contains no duplicate sound parameters and no transient voice/phase state.
+- `tests/lv2_state_smoke.c` exercises save, restore and empty-state fallback through the actual LV2 descriptor.
+- Two project-original deterministic presets are bundled for host validation: **Init Whole** and **Double Fifth Test**.
+- These M3 presets are test/utility sounds, not Korg factory programs.
+
+See `docs/m3-state-presets.md` for the persistence model and Ardour acceptance test.
 
 ## Performance
 
@@ -77,7 +92,9 @@ The build produces:
 build/isla-poly800.lv2/
 ├── isla-poly800.so
 ├── isla-poly800.ttl
-└── manifest.ttl
+├── manifest.ttl
+├── state.ttl
+└── presets.ttl
 ```
 
 Install for the current user:
@@ -88,17 +105,21 @@ rm -rf ~/.lv2/isla-poly800.lv2
 cp -a build/isla-poly800.lv2 ~/.lv2/
 ```
 
-Then restart/rescan Ardour. The LV2 URI and port layout are unchanged from M1, so existing host integration remains compatible. The display name may still read **ISLA Poly-800 (M1 Architecture Port)** during this calibration stage.
+Then restart/rescan Ardour. The plugin URI and port layout are unchanged from M1/M2, so existing host integration remains structurally compatible.
 
 ## Source layout
 
 ```text
-src/isla_poly800.c       LV2/MIDI host glue only
+src/isla_poly800.c       LV2/MIDI glue + versioned state interface
 src/poly800_core.c       per-instance synthesis core
 src/poly800_core.h       core API and stock parameter model
-lv2/                     LV2 metadata / generic controls
+lv2/manifest.ttl         plugin/preset discovery
+lv2/state.ttl            LV2 state-interface metadata
+lv2/presets.ttl          deterministic M3 utility presets
+lv2/isla-poly800.ttl     ports / generic controls
 tests/core_smoke.c       headless DSP smoke/stress test
 tests/core_calibration.c M2 fidelity regression tests
+tests/lv2_state_smoke.c  M3 LV2 state save/restore test
 tests/core_bench.c       reproducible DSP performance benchmark
 ```
 
@@ -113,10 +134,9 @@ No Korg ROMs, firmware, cassette images or other proprietary assets are required
 - **M0:** headless LV2 host smoke test — complete and validated in Ardour.
 - **M1:** Poly-800 architecture core + original parameter surface — complete.
 - **M1.1:** Release build defaults + real-time DSP optimisation + benchmark — complete.
-- **M2:** Bristol source-level parameter/behaviour calibration + regression tests — current.
-- **M2.1:** controlled A/B calibration of MG-DCO depth, chorus constants and remaining audible scaling.
-- **M3:** explicit LV2 state/preset workflow and reliable save/restore validation.
-- **M4:** broader A/B comparison against Bristol/reference recordings and fidelity corrections.
+- **M2:** Bristol source-level parameter/behaviour calibration + regression tests — complete.
+- **M3:** versioned LV2 state interface + deterministic preset workflow + restore tests — current.
+- **M4:** broader controlled A/B comparison against Bristol/reference recordings and fidelity corrections, including remaining MG/chorus calibration.
 - **M5:** reproducible factory-patch data, subject to asset/licensing verification.
 - **M6:** optional refinements; custom GUI remains non-essential.
 
