@@ -1,0 +1,29 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux-lv2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config lv2-dev
+
+      - name: Configure
+        run: cmake -S . -B build
+
+      - name: Build
+        run: cmake --build build --verbose
+
+      - name: Check LV2 bundle
+        run: |
+          test -f build/isla-poly800.lv2/isla-poly800.so
+          test -f build/isla-poly800.lv2/manifest.ttl
+          test -f build/isla-poly800.lv2/isla-poly800.ttl
+          find build/isla-poly800.lv2 -maxdepth 1 -type f -print
