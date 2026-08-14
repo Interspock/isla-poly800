@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(isla_poly800 VERSION 0.4.0 LANGUAGES C)
+project(isla_poly800 VERSION 0.5.0 LANGUAGES C)
 
 # Audio DSP should not accidentally ship as an unoptimised debug-style build.
 # Users can still explicitly request Debug/RelWithDebInfo when needed.
@@ -40,6 +40,7 @@ configure_file(lv2/manifest.ttl "${BUNDLE_DIR}/manifest.ttl" COPYONLY)
 configure_file(lv2/isla-poly800.ttl "${BUNDLE_DIR}/isla-poly800.ttl" COPYONLY)
 configure_file(lv2/state.ttl "${BUNDLE_DIR}/state.ttl" COPYONLY)
 configure_file(lv2/presets.ttl "${BUNDLE_DIR}/presets.ttl" COPYONLY)
+configure_file(lv2/factory-presets.ttl "${BUNDLE_DIR}/factory-presets.ttl" COPYONLY)
 
 add_custom_target(bundle ALL DEPENDS isla_poly800)
 
