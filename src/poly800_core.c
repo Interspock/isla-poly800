@@ -83,14 +83,23 @@ static float render_dco(float phase[P800_HARMONICS],
  * traversal of about 8 seconds and a perceptual/level law (raw/31)^2.2.
  * It predicts 0.56, 1.09, 3.02 and 4.95 seconds respectively.
  *
- * Korg only publishes these anchors at rate 31, so retain Bristol ENV5S's
- * useful squared interpolation across rate values while replacing its
- * provisional 10-second full-scale / linear-level assumptions.
+ * M5.4.1 adds a second empirical anchor from an unmodified Poly-800 factory-84
+ * recording: short key presses with RELEASE=20 fall to silence in roughly
+ * 0.2-0.3 seconds.  The earlier Bristol-derived rate^2 interpolation predicted
+ * about 3.3 seconds and is therefore far too shallow through the middle of the
+ * 0..31 range.  A rate exponent of 7.5 preserves every published DECAY=31
+ * manual anchor while putting rate 20 at about 0.30 seconds full-scale.
+ *
+ * Korg describes Attack/Decay/Slope/Release as the same class of RATE control,
+ * so use one calibrated rate law for all four stages rather than special-case
+ * Release.  Audio-reference calibration is deliberately kept separate from the
+ * factory-preset data; no reference audio is redistributed with this source.
  *
  * All expensive powf() work happens when controls change, never per sample.
  */
 #define P800_M54_DEG_MAX_SECONDS 8.0f
 #define P800_M54_DEG_LEVEL_EXP   2.2f
+#define P800_M541_DEG_RATE_EXP   7.5f
 
 static float stock_deg_level(float raw)
 {
@@ -109,7 +118,7 @@ static float stock_deg_rate_step(const Poly800Core* core, float raw)
         return 0.5f;
 
     const double seconds = (double)P800_M54_DEG_MAX_SECONDS
-                         * (double)n * (double)n;
+                         * pow((double)n, (double)P800_M541_DEG_RATE_EXP);
     return clampf((float)(1.0 / (seconds * core->sample_rate)),
                   0.0f, 0.5f);
 }
