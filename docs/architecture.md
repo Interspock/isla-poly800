@@ -1,99 +1,198 @@
-# Architecture
+# Current architecture
+
+This document describes the **current v0.6/M6 production architecture**. Older milestone documents are retained separately as development history.
 
 ## Goal
 
-ISLA Poly-800 is a headless LV2 instrument that preserves the important synthesis behaviour of the Korg Poly-800 while remaining native, inspectable and rebuildable on GNU/Linux.
+ISLA Poly-800 is a headless LV2 instrument that reconstructs the Korg Poly-800 MkI / EX-800 synthesis behaviour while remaining inspectable, reproducible and safe for multi-instance use on GNU/Linux.
 
-The project deliberately separates **host integration** from **synthesis core**:
+The design separates host integration from synthesis:
 
 ```text
-Ardour
-  |
-  | MIDI events + LV2 control ports
-  v
+Ardour / LV2 host
+      |
+      | MIDI events + control ports + state
+      v
 src/isla_poly800.c
-  |
-  | note/control API
-  v
-src/poly800_core.c
-  |
-  v
+      |
+      | note/control API
+      v
+src/poly800_core_m6.c
+      |
+      v
 stereo audio
 ```
 
-## M0 result
-
-M0 proved the LV2 boundary with a temporary sine synth. It was compiled, installed and tested successfully in Ardour on the ISLA machine. That oscillator is now removed from the plugin path.
-
-## M1 core
-
-M1 introduces an instance-owned Poly-800 core with the original high-level signal topology:
+## Signal topology
 
 ```text
-WHOLE:  8 x [DCO1 -> DEG1] --+
-                                +--> shared mix --> DEG3/noise --> shared VCF --> chorus
-DOUBLE: 4 x [DCO1 -> DEG1] --+
-              [DCO2 -> DEG2] --+
+WHOLE
+  8 x [DCO1 -> DEG1] -------------------+
+                                         |
+DOUBLE                                   +--> oscillator mix --+
+  4 x [DCO1 -> DEG1] -------------------+                    |
+      [DCO2 -> DEG2] -------------------+                    +--> shared VCF --> fixed chorus --> L/R
+                                                               ^
+                                                               |
+                                            noise -> DEG3 -----+
+                                                               |
+                                            MG ----------------+
 ```
 
-Important properties:
+Important stock properties:
 
-- WHOLE mode provides eight voices.
-- DOUBLE mode provides four voices and two DCO/DEG paths per voice.
-- DCOs construct tones from the 16', 8', 4' and 2' footages.
-- DEG1 and DEG2 are voice-local six-stage envelopes.
-- DEG3 and the VCF are shared/paraphonic by default, which is a defining Poly-800 characteristic.
-- DEG3 can use single or multi retrigger according to parameter 46.
-- the MG/LFO is synth-global.
-- noise feeds the shared DEG3/filter path.
-- chorus is post-filter.
+- WHOLE provides eight notes of DCO1 polyphony;
+- DOUBLE provides four notes with DCO1+DCO2;
+- DCO footages are 16', 8', 4', 2';
+- DEG1/DEG2 are voice-local;
+- DEG3 and the VCF are shared/paraphonic;
+- parameter 46 controls single/multi VCF-envelope triggering;
+- MG is synth-global;
+- noise joins the shared DEG3/filter path;
+- chorus is post-filter and stock-visible only as ON/OFF.
+
+## Current core layering
+
+The repository intentionally keeps several frozen checkpoints because fidelity work repeatedly replaced plausible assumptions with stronger evidence.
+
+```text
+src/poly800_core_m2.inc
+    frozen M2 Bristol-calibrated synthesis/filter baseline
+            |
+            v
+src/poly800_core.c
+    frozen M4/M5 stock-DCO / DEG / detune / chorus checkpoint
+            |
+            v
+src/poly800_core_m6.c
+    current production core; adds EX-800 ROM-grounded MG control
+```
+
+CMake builds `src/poly800_core_m6.c` for the plugin, normal tests, benchmark and A/B probe.
+
+The frozen pre-M6 `src/poly800_core.c` remains only to preserve the historical M4 regression executable and make the change in modulation behaviour auditable. It is not a second runtime engine selected by the LV2 host.
+
+## DCO model
+
+Each voice owns four phase accumulators per DCO, corresponding to the stock footages. Every enabled footage generates a band-limited square contribution.
+
+The waveform selector changes only the footage weights:
+
+```text
+waveform 1: 1, 1,   1,   1
+waveform 2: 1, 1/2, 1/4, 1/8
+```
+
+This reflects the documented tone-generator/resistor-mix mechanism rather than treating waveform 2 as an independent ideal saw oscillator.
+
+## Envelopes
+
+Each sounding voice owns DEG1 and DEG2 state. DEG3 is shared.
+
+The stage machine is:
+
+```text
+OFF -> ATTACK -> DECAY to BREAKPOINT -> SLOPE to SUSTAIN -> SUSTAIN -> RELEASE -> OFF
+```
+
+The current audio-domain timing/level calibration is retained from M5.4/M5.4.1. EX-800 ROM envelope tables are present in M6 as control-domain evidence but are not directly mapped to gain until the downstream analog transfer is modeled.
+
+## MG
+
+M6 uses a firmware-rate state machine rather than an audio-rate sine oscillator.
+
+Per instance, the MG owns:
+
+- fractional audio-sample accumulator used to schedule firmware-rate updates;
+- 8-bit phase/counter;
+- sign/direction bit;
+- held DCO modulation value;
+- held VCF modulation value;
+- delay counter.
+
+P81 indexes the recovered 16-byte ROM increment table. Each control tick advances the 8-bit counter, folds it into the recovered triangle magnitude and applies P83/P84 with the original four-bit fixed-point multiply.
+
+The held result is consumed by the audio renderer until the next control tick, preserving the original low-rate CV staircase.
+
+## Shared filter
+
+One `SharedFilter` object is owned by each plugin instance.
+
+The filter is a compact adaptation of Bristol's nonlinear Huovilainen four-pole path, including its high-sample-rate branch. Modulation is the sum of shared DEG3 and M6 MG contributions plus keyboard tracking semantics.
+
+No filter state is shared between plugin instances.
+
+## Chorus
+
+Each instance owns one persistent delay history. M6 retains the fixed M4 stock-style BBD approximation.
+
+Chorus state advances while bypassed, avoiding a synthetic restart when P48 is enabled.
 
 ## LV2 boundary
 
-The wrapper is intentionally small. It owns:
+`src/isla_poly800.c` owns only host-facing responsibilities:
 
 - Atom Sequence MIDI input;
-- sample-offset event handling;
-- stereo output buffers;
-- control-port to `Poly800Params` translation;
-- one `Poly800Core` object per LV2 instance.
+- sample-offset event dispatch;
+- stereo output ports;
+- control-port translation into `Poly800Params`;
+- LV2 State schema marker;
+- one `Poly800Core` object per plugin instance.
 
-It does **not** contain synthesis algorithms, JACK/ALSA integration, GUI code or filesystem/session logic.
+It intentionally does not contain oscillator/filter algorithms, JACK/ALSA device code, GUI logic or session filesystem logic.
 
-## Parameter surface
+## Parameter model
 
-M1 exposes the original sound parameters by their Poly-800 numbers so Ardour's generic editor is useful without a custom GUI:
+The LV2 exposes stock sound parameters by original number:
 
-- 11..18 DCO1/mode;
-- 21..27 DCO2;
-- 31..33 interval/detune/noise;
-- 41..48 VCF/chorus (excluding unused 47);
-- 51..56 DEG1;
-- 61..66 DEG2;
-- 71..76 DEG3;
-- 81..84 MG.
+```text
+11..18  DCO1 / mode
+21..27  DCO2
+31..33  interval / detune / noise
+41..48  VCF / chorus
+51..56  DEG1
+61..66  DEG2
+71..76  DEG3
+81..84  MG
+```
 
-Parameters 86..88 are MIDI configuration on the hardware and are deliberately not plugin controls; Ardour owns channel and program routing.
+Hardware MIDI/global parameters 86..88 are omitted; the DAW owns those concerns.
 
 ## Per-instance state
 
-No mutable DSP state is global. Every instance owns its voices, oscillator phases, envelopes, shared filter, LFO, noise generator and chorus delay:
+Every mutable DSP object belongs to the instance:
 
 ```text
-Ardour track A -> LV2 instance A -> Poly-800 state A
-Ardour track B -> LV2 instance B -> Poly-800 state B
+track A -> instance A -> voices/phases/DEGs/filter/MG/RNG/chorus A
+track B -> instance B -> voices/phases/DEGs/filter/MG/RNG/chorus B
 ```
 
-This is an explicit departure from assumptions in the old standalone Bristol architecture and is required for safe multi-instance plugin use.
+This makes simultaneous different patches safe and avoids global-state assumptions inherited from old standalone synthesizer architectures.
 
 ## Real-time rules
 
-The audio callback performs no heap allocation/free, filesystem access, locks, process spawning or network/IPC. Persistent buffers, including the chorus delay, are allocated when the core is created.
+The audio callback performs no filesystem access, locks, process spawning, networking or routine heap allocation/free.
+
+Expensive control recalculation occurs only when parameters change. The recovered MG state machine uses integer/table operations at its low control rate rather than trigonometric work per sample.
 
 ## Fidelity boundary
 
-M1 establishes architecture and parameter semantics, not final calibration. Later work must A/B oscillator waveform/aliasing behaviour, DCO2 detune, MG curves, filter scaling, chorus timing/mix and factory-program values. Those refinements should not require changing the LV2 host architecture.
+Architecture and digital control are modeled separately from analog transfer.
 
-## GUI
+The production engine currently treats the following as established:
 
-A custom GUI remains deliberately out of scope. Ardour's generic LV2 editor exposes the meaningful controls and allows host-level automation/MIDI mapping.
+- stock voice/filter topology;
+- DCO footage/waveform construction;
+- stock parameter semantics;
+- EX-800 MG table/state/fixed-point/delay behaviour;
+- complete factory parameter bank.
+
+The following remain refinement targets:
+
+- exact NJM2069 control transfer and component behaviour;
+- analog mapping of the recovered DEG DAC/control law;
+- exact intermediate P32 pulse-thinning detune ratios;
+- exact MSM5232 divider/clock imperfections;
+- measured BBD chorus constants.
+
+See [reconstruction.md](reconstruction.md) for the evidence behind those boundaries.
