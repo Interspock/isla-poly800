@@ -88,6 +88,15 @@ add_test(NAME core_host_refresh COMMAND core_host_refresh)
 add_core_tool(core_dco_stock tests/core_dco_stock.c)
 add_test(NAME core_dco_stock COMMAND core_dco_stock)
 
+# This test includes poly800_core.c directly so it can time the internal DEG
+# stages without inferring envelope state through oscillator/filter audio.
+add_executable(core_deg_timing tests/core_deg_timing.c)
+target_compile_features(core_deg_timing PRIVATE c_std_99)
+target_include_directories(core_deg_timing PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_compile_options(core_deg_timing PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(core_deg_timing PRIVATE m)
+add_test(NAME core_deg_timing COMMAND core_deg_timing)
+
 add_core_tool(core_m4 tests/core_m4.c)
 add_test(NAME core_m4 COMMAND core_m4)
 
