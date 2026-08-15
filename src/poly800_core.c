@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
- * ISLA Poly-800 M4 calibration layer + stock-hardware corrections.
+ * ISLA Poly-800 M4/M5 stock-hardware calibration layer.
  *
  * Keep the M2 synthesis/filter core frozen below and override behaviours where
- * later hardware evidence is stronger than Bristol's extended emulation path:
- * stock DCO harmonic weighting, P32 DCO2 detune, P83 MG->DCO and P48 chorus.
+ * later hardware evidence is stronger than Bristol's extended/provisional path:
+ * stock DCO harmonic weighting, DEG timing/levels, P32 DCO2 detune,
+ * P83 MG->DCO and P48 chorus.
  *
  * MG source baseline:
  *   nomadbyte/bristol-fixes @ 116fb8a2d21727676e21db5f1efe295c1ea22d61
  *   bristolpoly800.c, lfo.c
  *
  * Stock-hardware source references:
- *   Korg Poly-800 owner/service manuals for the additive square-wave DCO,
- *   DCO2 detune (-20 cents maximum), and the fixed MN3209/MN3102 BBD chorus.
+ *   Korg Poly-800 owner's/service manuals for the additive square-wave DCO,
+ *   six-stage DEG behaviour/timing examples, DCO2 detune (-20 cents maximum),
+ *   and the fixed MN3209/MN3102 BBD chorus.
  *
  * Bristol remains the architecture/code oracle where it follows the stock
- * instrument, but its frontend/extensions do not override explicit Korg
- * hardware specifications when the two conflict.
+ * instrument, but explicit Korg hardware documentation wins on conflicts.
  */
 
 #define poly800_core_create poly800_core_create_m2
@@ -45,7 +46,7 @@
  *   waveform 2: 1, 1/2, 1/4, 1/8
  *
  * With all four footages enabled the second relationship forms the familiar
- * stepped approximation to a sawtooth.  This supersedes the M2 provisional
+ * stepped approximation to a sawtooth. This supersedes the M2 provisional
  * interpretation that rendered four independent saw oscillators.
  */
 static float render_dco(float phase[P800_HARMONICS],
@@ -67,6 +68,79 @@ static float render_dco(float phase[P800_HARMONICS],
              * P800_DCO_HARMONIC_GAIN * weight;
     }
     return out;
+}
+
+/*
+ * M5.4 stock DEG calibration.
+ *
+ * The Korg owner's manual gives four concrete timing examples for DECAY=31:
+ *   BP=30 -> about 0.5 s
+ *   BP=29 -> about 1.2 s
+ *   BP=25 -> about 3.0 s
+ *   BP=20 -> about 5.0 s
+ *
+ * A compact fit to those hardware-manual anchors is a maximum full-scale
+ * traversal of about 8 seconds and a perceptual/level law (raw/31)^2.2.
+ * It predicts 0.56, 1.09, 3.02 and 4.95 seconds respectively.
+ *
+ * Korg only publishes these anchors at rate 31, so retain Bristol ENV5S's
+ * useful squared interpolation across rate values while replacing its
+ * provisional 10-second full-scale / linear-level assumptions.
+ *
+ * All expensive powf() work happens when controls change, never per sample.
+ */
+#define P800_M54_DEG_MAX_SECONDS 8.0f
+#define P800_M54_DEG_LEVEL_EXP   2.2f
+
+static float stock_deg_level(float raw)
+{
+    const float n = clampf(raw, 0.0f, 31.0f) / 31.0f;
+    if (n <= 0.0f)
+        return 0.0f;
+    if (n >= 1.0f)
+        return 1.0f;
+    return powf(n, P800_M54_DEG_LEVEL_EXP);
+}
+
+static float stock_deg_rate_step(const Poly800Core* core, float raw)
+{
+    const float n = clampf(raw, 0.0f, 31.0f) / 31.0f;
+    if (n <= 0.0f)
+        return 0.5f;
+
+    const double seconds = (double)P800_M54_DEG_MAX_SECONDS
+                         * (double)n * (double)n;
+    return clampf((float)(1.0 / (seconds * core->sample_rate)),
+                  0.0f, 0.5f);
+}
+
+static EnvConfig make_stock_env_config(const Poly800Core* core,
+    float attack, float decay, float breakpoint,
+    float slope, float sustain, float release)
+{
+    EnvConfig cfg;
+    cfg.attack_step = stock_deg_rate_step(core, attack);
+    cfg.decay_step = stock_deg_rate_step(core, decay);
+    cfg.breakpoint = stock_deg_level(breakpoint);
+    cfg.slope_step = stock_deg_rate_step(core, slope);
+    cfg.sustain = stock_deg_level(sustain);
+    cfg.release_step = stock_deg_rate_step(core, release);
+    return cfg;
+}
+
+static void apply_stock_deg_calibration(Poly800Core* core)
+{
+    const Poly800Params* p = &core->params;
+
+    core->derived.deg1 = make_stock_env_config(core,
+        p->deg1_attack, p->deg1_decay, p->deg1_breakpoint,
+        p->deg1_slope, p->deg1_sustain, p->deg1_release);
+    core->derived.deg2 = make_stock_env_config(core,
+        p->deg2_attack, p->deg2_decay, p->deg2_breakpoint,
+        p->deg2_slope, p->deg2_sustain, p->deg2_release);
+    core->derived.deg3 = make_stock_env_config(core,
+        p->deg3_attack, p->deg3_decay, p->deg3_breakpoint,
+        p->deg3_slope, p->deg3_sustain, p->deg3_release);
 }
 
 /*
@@ -200,6 +274,7 @@ void poly800_core_set_params(Poly800Core* core, const Poly800Params* params)
         return;
 
     poly800_core_set_params_m2(core, params);
+    apply_stock_deg_calibration(core);
     apply_stock_dco2_detune(core);
 }
 
@@ -209,6 +284,7 @@ void poly800_core_reset(Poly800Core* core)
         return;
 
     poly800_core_reset_m2(core);
+    apply_stock_deg_calibration(core);
     apply_stock_dco2_detune(core);
 }
 
