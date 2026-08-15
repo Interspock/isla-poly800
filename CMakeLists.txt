@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(isla_poly800 VERSION 0.5.0 LANGUAGES C)
+project(isla_poly800 VERSION 0.6.0 LANGUAGES C)
 
 # Audio DSP should not accidentally ship as an unoptimised debug-style build.
 # Users can still explicitly request Debug/RelWithDebInfo when needed.
@@ -13,11 +13,12 @@ pkg_check_modules(LV2 REQUIRED lv2)
 
 set(BUNDLE_DIR "${CMAKE_BINARY_DIR}/isla-poly800.lv2")
 set(FACTORY_PRESETS_TTL "${BUNDLE_DIR}/factory-presets.ttl")
+set(POLY800_CORE_SOURCE src/poly800_core_m6.c)
 file(MAKE_DIRECTORY "${BUNDLE_DIR}")
 
 add_library(isla_poly800 MODULE
     src/isla_poly800.c
-    src/poly800_core.c
+    ${POLY800_CORE_SOURCE}
 )
 target_compile_features(isla_poly800 PRIVATE c_std_99)
 target_include_directories(isla_poly800 PRIVATE
@@ -68,7 +69,7 @@ enable_testing()
 function(add_core_tool target source)
     add_executable(${target}
         ${source}
-        src/poly800_core.c
+        ${POLY800_CORE_SOURCE}
     )
     target_compile_features(${target} PRIVATE c_std_99)
     target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -88,8 +89,9 @@ add_test(NAME core_host_refresh COMMAND core_host_refresh)
 add_core_tool(core_dco_stock tests/core_dco_stock.c)
 add_test(NAME core_dco_stock COMMAND core_dco_stock)
 
-# This test includes poly800_core.c directly so it can time the internal DEG
+# This test includes the M5 core directly so it can time the internal DEG
 # stages without inferring envelope state through oscillator/filter audio.
+# M6 intentionally retains that calibrated DEG transfer unchanged.
 add_executable(core_deg_timing tests/core_deg_timing.c)
 target_compile_features(core_deg_timing PRIVATE c_std_99)
 target_include_directories(core_deg_timing PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -97,13 +99,31 @@ target_compile_options(core_deg_timing PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(core_deg_timing PRIVATE m)
 add_test(NAME core_deg_timing COMMAND core_deg_timing)
 
-add_core_tool(core_m4 tests/core_m4.c)
+# Keep the M4/M5 regression executable on the frozen pre-M6 wrapper. Its old
+# P83 assertion deliberately checks Bristol-scale modulation and is therefore
+# a historical regression, not the M6 stock-MG acceptance test.
+add_executable(core_m4
+    tests/core_m4.c
+    src/poly800_core.c
+)
+target_compile_features(core_m4 PRIVATE c_std_99)
+target_include_directories(core_m4 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_compile_options(core_m4 PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(core_m4 PRIVATE m)
 add_test(NAME core_m4 COMMAND core_m4)
+
+# White-box acceptance test for the recovered EX-800 MG tables and arithmetic.
+add_executable(core_m6_mg tests/core_m6_mg.c)
+target_compile_features(core_m6_mg PRIVATE c_std_99)
+target_include_directories(core_m6_mg PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_compile_options(core_m6_mg PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(core_m6_mg PRIVATE m)
+add_test(NAME core_m6_mg COMMAND core_m6_mg)
 
 add_executable(lv2_state_smoke
     tests/lv2_state_smoke.c
     src/isla_poly800.c
-    src/poly800_core.c
+    ${POLY800_CORE_SOURCE}
 )
 target_compile_features(lv2_state_smoke PRIVATE c_std_99)
 target_include_directories(lv2_state_smoke PRIVATE
