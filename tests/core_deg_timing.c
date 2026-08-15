@@ -5,7 +5,7 @@
 /*
  * Include the implementation so this regression can exercise the calibrated
  * internal DEG law directly without inferring timing through oscillator/filter
- * audio.  This remains a test-only translation unit.
+ * audio. This remains a test-only translation unit.
  */
 #include "../src/poly800_core.c"
 
@@ -28,6 +28,33 @@ static double decay_seconds(float breakpoint)
     unsigned long samples = 0;
     const unsigned long limit = (unsigned long)(RATE * 10.0);
     while (env.stage == ENV_DECAY && samples < limit) {
+        env_tick(&env, &cfg);
+        ++samples;
+    }
+
+    poly800_core_destroy(core);
+    if (samples >= limit)
+        return -1.0;
+    return (double)samples / RATE;
+}
+
+static double release_seconds(float release)
+{
+    Poly800Core* core = poly800_core_create(RATE);
+    if (!core)
+        return -1.0;
+
+    EnvConfig cfg = make_stock_env_config(core,
+        0.0f, 0.0f, 31.0f,
+        0.0f, 31.0f, release);
+
+    Envelope env;
+    env.value = 1.0f;
+    env.stage = ENV_RELEASE;
+
+    unsigned long samples = 0;
+    const unsigned long limit = (unsigned long)(RATE * 10.0);
+    while (env.stage == ENV_RELEASE && samples < limit) {
         env_tick(&env, &cfg);
         ++samples;
     }
@@ -69,13 +96,30 @@ int main(void)
         }
     }
 
-    /* Factory 84 uses DEG1 decay=slope=26 and sustain=0.  With equal rates,
-     * the full peak-to-zero traversal should be the rate-26 full-scale time. */
-    const double n = 26.0 / 31.0;
-    const double expected84 = P800_M54_DEG_MAX_SECONDS * n * n;
-    printf("Factory 84 DEG1 peak-to-zero reference: %.3f s\n", expected84);
-    if (expected84 < 5.5 || expected84 > 5.8)
+    /*
+     * Factory program 84 uses Release=20 on DEG1/DEG2/DEG3. Two isolated
+     * short notes in a hardware recording fall from the key-off knee to near
+     * silence in about 0.2-0.3 s. With the common Korg rate law and a full
+     * scale starting level, rate 20 should therefore be around 0.30 s rather
+     * than the 3.33 s produced by the old Bristol-derived rate^2 curve.
+     */
+    const double release20 = release_seconds(20.0f);
+    printf("DEG release20 full-scale reference: %.3f s\n", release20);
+    if (release20 < 0.26 || release20 > 0.34) {
+        fprintf(stderr, "DEG release20 misses factory-audio anchor\n");
         return 2;
+    }
+
+    /* The same rate law applies to Attack/Decay/Slope/Release. Factory 84's
+     * rate 26 is now roughly 2.14 s for a full 0..1 traversal; actual Decay and
+     * Slope segments are shorter because they cover only part of the level
+     * range. */
+    const double n = 26.0 / 31.0;
+    const double expected84 = P800_M54_DEG_MAX_SECONDS
+                            * pow(n, P800_M541_DEG_RATE_EXP);
+    printf("Factory 84 rate26 full-scale reference: %.3f s\n", expected84);
+    if (expected84 < 2.0 || expected84 > 2.3)
+        return 3;
 
     return 0;
 }
